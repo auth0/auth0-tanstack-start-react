@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+*.log
+.DS_Store
+.env
+.env.local
+
+# Package manager is npm, but per project decision the lockfile is NOT committed.
+package-lock.json
+docs
+
+# Local SDK pack artifact (used by examples via file:); not committed.
+*.tgz

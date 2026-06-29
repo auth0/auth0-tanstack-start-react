@@ -1,0 +1,105 @@
+{
+  "name": "@auth0/auth0-tanstack-start-react",
+  "version": "0.0.0",
+  "description": "Auth0 Authentication SDK for TanStack Start (React) applications",
+  "author": "Auth0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/client/index.cjs",
+  "module": "./dist/client/index.js",
+  "types": "./dist/client/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/client/index.d.ts",
+      "require": "./dist/client/index.cjs",
+      "import": "./dist/client/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "require": "./dist/client/index.cjs",
+      "import": "./dist/client/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "require": "./dist/server/index.cjs",
+      "import": "./dist/server/index.js"
+    },
+    "./server/middleware": {
+      "types": "./dist/server/middleware.d.ts",
+      "require": "./dist/server/middleware.cjs",
+      "import": "./dist/server/middleware.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "require": "./dist/testing/index.cjs",
+      "import": "./dist/testing/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors/index.d.ts",
+      "require": "./dist/errors/index.cjs",
+      "import": "./dist/errors/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "require": "./dist/types/index.cjs",
+      "import": "./dist/types/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "clean": "rm -rf ./dist",
+    "lint": "eslint \"./src/**/*.ts*\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ci": "vitest --watch false --coverage",
+    "docs": "typedoc"
+  },
+  "dependencies": {
+    "@auth0/auth0-server-js": "^1.7.0"
+  },
+  "peerDependencies": {
+    "@tanstack/react-router": "^1.0.0",
+    "@tanstack/react-start": "^1.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-router": "^1.0.0",
+    "@tanstack/react-start": "^1.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^22.20.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "eslint": "^9.0.0",
+    "jsdom": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.4.0",
+    "typedoc": "^0.28.0",
+    "typescript": "~5.8.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/auth0/auth0-tanstack-start-react.git"
+  },
+  "keywords": [
+    "auth0",
+    "tanstack",
+    "tanstack-start",
+    "react",
+    "authentication",
+    "oidc",
+    "oauth2"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/client/index.ts",
+    "src/server/index.ts",
+    "src/testing/index.ts",
+    "src/errors/index.ts",
+    "src/types/index.ts"
+  ],
+  "out": "docs",
+  "readme": "README.md",
+  "name": "@auth0/auth0-tanstack-start-react",
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"],
+  "excludePrivate": true,
+  "excludeInternal": true
+}
