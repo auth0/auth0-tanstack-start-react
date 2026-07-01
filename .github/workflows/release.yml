@@ -1,0 +1,28 @@
+name: Create npm and GitHub Release
+
+on:
+  pull_request:
+    types:
+      - closed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write # For publishing to npm using --provenance
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'release/'))
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - id: release
+        uses: ./.github/actions/release
+        with:
+          node-version: 24
+          require-build: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}

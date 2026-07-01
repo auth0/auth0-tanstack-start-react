@@ -1,0 +1,66 @@
+name: Release the package
+
+inputs:
+  node-version:
+    required: true
+    type: string
+  require-build:
+    default: true
+    type: string
+  github-token:
+    required: true
+
+outputs:
+  version:
+    value: ${{ steps.get_version.outputs.version }}
+
+runs:
+  using: composite
+
+  steps:
+    # Get the version from the root .version file
+    - id: get_version
+      uses: ./.github/actions/get-version
+      with:
+        working-directory: ./
+
+    # Get the prerelease flag from the version
+    - id: get_prerelease
+      uses: ./.github/actions/get-prerelease
+      with:
+        version: ${{ steps.get_version.outputs.version }}
+
+    # Get the release notes from the release PR body
+    - id: get_release_notes
+      uses: ./.github/actions/get-release-notes
+      with:
+        token: ${{ inputs.github-token }}
+        version: ${{ steps.get_version.outputs.version }}
+        repo_owner: ${{ github.repository_owner }}
+        repo_name: ${{ github.event.repository.name }}
+
+    # Check if the tag already exists
+    - id: tag_exists
+      uses: ./.github/actions/tag-exists
+      with:
+        tag: v${{ steps.get_version.outputs.version }}
+        token: ${{ inputs.github-token }}
+
+    # Publish the release to npm
+    - uses: ./.github/actions/npm-publish
+      if: steps.tag_exists.outputs.exists != 'true'
+      with:
+        node-version: ${{ inputs.node-version }}
+        require-build: ${{ inputs.require-build }}
+        version: ${{ steps.get_version.outputs.version }}
+
+    # Create the GitHub release for the tag
+    - uses: ./.github/actions/release-create
+      if: steps.tag_exists.outputs.exists != 'true'
+      with:
+        token: ${{ inputs.github-token }}
+        name: v${{ steps.get_version.outputs.version }}
+        body: ${{ steps.get_release_notes.outputs.release-notes }}
+        tag: v${{ steps.get_version.outputs.version }}
+        commit: ${{ github.sha }}
+        prerelease: ${{ steps.get_prerelease.outputs.prerelease }}

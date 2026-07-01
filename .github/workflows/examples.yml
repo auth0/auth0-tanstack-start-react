@@ -1,0 +1,49 @@
+name: Build Examples
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  basic-rwa:
+    name: basic-rwa
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Install SDK dependencies
+        run: npm install
+
+      # The example imports the SDK through a `file:../..` dependency, so the
+      # SDK must be built before the example can resolve and build against it.
+      - name: Build the SDK
+        run: npm run build
+
+      - name: Install example dependencies
+        working-directory: examples/basic-rwa
+        run: npm install
+
+      - name: Build the example
+        working-directory: examples/basic-rwa
+        run: npm run build
