@@ -83,7 +83,10 @@ function assertConnection(connection: string): void {
  *
  * @example
  * ```ts
- * const url = await connectAccount(auth0, { connection: 'google-oauth2' })
+ * const url = await connectAccount(auth0, {
+ *   connection: 'google-oauth2',
+ *   connectionScope: 'email profile',
+ * })
  * throw redirect({ href: url.toString() })
  * ```
  */

@@ -102,6 +102,7 @@ import { createStart } from '@tanstack/react-start'
 import { auth0Middleware } from '@auth0/auth0-tanstack-start-react/server/middleware'
 
 export const startInstance = createStart(() => ({
+  // ...rest of your config
   requestMiddleware: [auth0Middleware()],
 }))
 ```
@@ -125,6 +126,7 @@ import { routeTree } from './routeTree.gen'
 // TanStack Start requires this export to be named `getRouter`.
 export function getRouter() {
   return createRouter({
+    // ...rest of your config
     routeTree,
     context: { auth0: auth0RouterContext } as { auth0: Auth0RouterContext },
   })
@@ -138,6 +140,7 @@ import { Auth0Provider, auth0BeforeLoad } from '@auth0/auth0-tanstack-start-reac
 import type { Auth0RouterContext } from '@auth0/auth0-tanstack-start-react/types'
 
 export const Route = createRootRouteWithContext<{ auth0: Auth0RouterContext }>()({
+  // ...rest of your config
   beforeLoad: auth0BeforeLoad(),
   component: () => (
     <Auth0Provider>
@@ -262,20 +265,28 @@ To start it, send the user to the login route: call `useLogin()` (which also let
 `returnTo`), or use a plain link, `<a href="/auth/login">Log in</a>`. Logout works the same way
 through `useLogout()` or `<a href="/auth/logout">`.
 
-The full set of hooks and components:
+The full set of hooks:
 
-| Name | Kind | Purpose |
-| --- | --- | --- |
-| `useAuth0()` | hook | Returns `{ user, isAuthenticated, status, isLoading }`. |
-| `useUser()` | hook | Shorthand for the current `user`, or `undefined`. |
-| `useOrg()` | hook | Returns the current `Organization` from the `org_id` and `org_name` claims, or `undefined`. |
-| `useLogin()` | hook | Returns a function that redirects to the login route, with an optional `returnTo`. |
-| `useLogout()` | hook | Returns a function that clears the client cache and redirects to logout. |
-| `SignedIn` | component | Renders its children only when the user is authenticated. |
-| `SignedOut` | component | Renders its children only when the user is not authenticated. |
-| `HasOrg` | component | Renders its children when the user's `org_id` matches, with an optional `fallback`. |
-| `AuthReady` | component | Renders its children once `status` is `resolved`. |
-| `AuthLoading` | component | Renders its children while `status` is `loading`. |
+| Hook | Purpose |
+| --- | --- |
+| `useAuth0()` | Returns `{ user, isAuthenticated, status, isLoading }`. |
+| `useUser()` | Shorthand for the current `user`, or `undefined`. |
+| `useOrg()` | Returns the current `Organization` from the `org_id` and `org_name` claims, or `undefined`. |
+| `useLogin()` | Returns a function that redirects to the login route, with an optional `returnTo`. |
+| `useLogout()` | Returns a function that clears the client cache and redirects to logout. |
+
+The full set of components:
+
+| Component | Purpose |
+| --- | --- |
+| `SignedIn` | Renders its children only when the user is authenticated. |
+| `SignedOut` | Renders its children only when the user is not authenticated. |
+| `HasOrg` | Renders its children when the user's `org_id` matches, with an optional `fallback`. |
+| `AuthReady` | Renders its children once `status` is `resolved`. |
+| `AuthLoading` | Renders its children while `status` is `loading`. |
+
+For example, use `HasOrg` to show a section only to members of a given organization, and render a
+`fallback` for everyone else:
 
 ```tsx
 import { HasOrg } from '@auth0/auth0-tanstack-start-react/client'
@@ -669,13 +680,18 @@ flows) works unchanged; the SDK selects the right Auth0 domain for you on every 
 ### How a request flows
 
 ```mermaid
-flowchart TD
-  A["Browser hits login.brand-a.com/auth/login"] --> B["Trusted reverse proxy sets Host and X-Forwarded-* headers"]
-  B --> C["SDK resolver maps the host to auth.brand-a.com"]
-  C --> D["SDK infers appBaseUrl and builds redirect_uri = https://login.brand-a.com/auth/callback"]
-  D --> E["Redirect to Universal Login on auth.brand-a.com"]
-  E --> F["Auth0 checks redirect_uri against Allowed Callback URLs"]
-  F --> G["Callback completes; session is bound to auth.brand-a.com"]
+%%{init: {'theme':'base','themeVariables':{'actorBkg':'#4b5563','actorBorder':'#9ca3af','actorTextColor':'#ffffff','signalColor':'#9ca3af','signalTextColor':'#9ca3af','noteBkgColor':'#4b5563','noteTextColor':'#ffffff'}}}%%
+sequenceDiagram
+  participant B as Browser
+  participant P as Reverse proxy
+  participant S as SDK
+  participant A as Auth0
+  B->>P: GET login.brand-a.com/auth/login
+  P->>S: Forward request with Host and X-Forwarded headers
+  S->>S: Resolve host to auth.brand-a.com and build redirect_uri
+  S->>A: Redirect to Universal Login on auth.brand-a.com
+  A->>A: Check redirect_uri against Allowed Callback URLs
+  A->>B: Callback completes and session is bound to the domain
 ```
 
 ### Register each custom domain's callback in Auth0
