@@ -155,12 +155,12 @@ Two TanStack Start conventions are worth knowing before you start:
 We appreciate feedback and contribution to this repo! Before you get started, please read the following:
 
 - [Auth0's general contribution guidelines](https://github.com/auth0/open-source-template/blob/master/GENERAL-CONTRIBUTING.md)
-- [Auth0's code of conduct guidelines](https://github.com/atko-scratch/auth0-tanstack-start-react/blob/main/CODE-OF-CONDUCT.md)
+- [Auth0's code of conduct guidelines](https://github.com/auth0/auth0-tanstack-start-react/blob/main/CODE-OF-CONDUCT.md)
 - [This repo's contribution guide](./CONTRIBUTING.md)
 
 ### Raise an issue
 
-To provide feedback or report a bug, please [raise an issue on our issue tracker](https://github.com/atko-scratch/auth0-tanstack-start-react/issues).
+To provide feedback or report a bug, please [raise an issue on our issue tracker](https://github.com/auth0/auth0-tanstack-start-react/issues).
 
 ## Vulnerability Reporting
 
@@ -179,5 +179,5 @@ Please do not report security vulnerabilities on the public GitHub issue tracker
   Auth0 is an easy to implement, adaptable authentication and authorization platform. To learn more checkout <a href="https://auth0.com/why-auth0">Why Auth0?</a>
 </p>
 <p align="center">
-  This project is licensed under the Apache License 2.0. See the <a href="https://github.com/atko-scratch/auth0-tanstack-start-react/blob/main/LICENSE"> LICENSE</a> file for more info.
+  This project is licensed under the Apache License 2.0. See the <a href="https://github.com/auth0/auth0-tanstack-start-react/blob/main/LICENSE"> LICENSE</a> file for more info.
 </p>
