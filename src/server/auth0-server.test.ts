@@ -5,21 +5,30 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const statelessArgs: unknown[] = []
 const serverClientArgs: unknown[] = []
 
+// These classes are instantiated with `new` in auth0-server.ts, so the mocks
+// use `function` (not arrow) implementations. vitest 4 rejects arrow-function
+// mocks used as constructors.
 vi.mock('@auth0/auth0-server-js', () => ({
-  ServerClient: vi.fn((opts: unknown) => {
+  ServerClient: vi.fn(function (opts: unknown) {
     serverClientArgs.push(opts)
     return { __client: true }
   }),
-  CookieTransactionStore: vi.fn(() => ({ __txn: true })),
-  StatelessStateStore: vi.fn((opts: unknown) => {
+  CookieTransactionStore: vi.fn(function () {
+    return { __txn: true }
+  }),
+  StatelessStateStore: vi.fn(function (opts: unknown) {
     statelessArgs.push(opts)
     return { __stateless: true }
   }),
-  StatefulStateStore: vi.fn(() => ({ __stateful: true })),
+  StatefulStateStore: vi.fn(function () {
+    return { __stateful: true }
+  }),
 }))
 
 vi.mock('./cookie-handler.js', () => ({
-  TanStackStartCookieHandler: vi.fn(() => ({ __cookie: true })),
+  TanStackStartCookieHandler: vi.fn(function () {
+    return { __cookie: true }
+  }),
 }))
 
 import { auth0Server } from './auth0-server.js'
