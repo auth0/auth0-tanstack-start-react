@@ -8,9 +8,20 @@ import type { Auth0RouterContext } from '../types/index.js'
 let routeContextValue: Auth0RouterContext | undefined
 const invalidate = vi.fn()
 
+// Route ids the mock router "knows about". useRouteContext throws for any other
+// id, mirroring TanStack Router, so we can exercise the missing-root error path.
+const knownRouteIds = new Set(['__root__'])
+
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: (opts: { select: (c: { auth0?: unknown }) => unknown }) =>
-    opts.select({ auth0: routeContextValue }),
+  useRouteContext: (opts: {
+    from?: string
+    select: (c: { auth0?: unknown }) => unknown
+  }) => {
+    if (opts.from && !knownRouteIds.has(opts.from)) {
+      throw new Error(`invariant: no route found for id "${opts.from}"`)
+    }
+    return opts.select({ auth0: routeContextValue })
+  },
   useRouter: () => ({ invalidate }),
 }))
 
@@ -65,6 +76,27 @@ describe('Auth0Provider', () => {
     const { result } = renderHook(() => useAuth0Context(), { wrapper })
     result.current.logout()
     expect(invalidate).toHaveBeenCalled()
+  })
+
+  it('throws a clear SDK error when the root route id is not found', () => {
+    routeContextValue = RESOLVED
+    const badWrapper = ({ children }: { children: ReactNode }) =>
+      createElement(Auth0Provider, { children, from: '/does-not-exist' })
+    expect(() =>
+      renderHook(() => useAuth0Context(), { wrapper: badWrapper }),
+    ).toThrow(/could not read the route context from/)
+  })
+
+  it('reads context from a custom `from` route id', () => {
+    knownRouteIds.add('/layout')
+    routeContextValue = RESOLVED
+    const customWrapper = ({ children }: { children: ReactNode }) =>
+      createElement(Auth0Provider, { children, from: '/layout' })
+    const { result } = renderHook(() => useAuth0Context(), {
+      wrapper: customWrapper,
+    })
+    expect(result.current.isAuthenticated).toBe(true)
+    knownRouteIds.delete('/layout')
   })
 })
 
