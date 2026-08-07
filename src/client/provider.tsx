@@ -68,6 +68,12 @@ export interface Auth0ProviderProps {
   loginPath?: string
   /** Override the logout route path. Default: `/auth/logout`. */
   logoutPath?: string
+  /**
+   * The route id whose context carries `auth0` (populated by
+   * `auth0BeforeLoad()`). Defaults to the root route id `__root__`. Override
+   * only if your app names or structures its root route differently.
+   */
+  from?: string
 }
 
 /**
@@ -80,12 +86,26 @@ export function Auth0Provider({
   children,
   loginPath = '/auth/login',
   logoutPath = '/auth/logout',
+  from = '__root__',
 }: Auth0ProviderProps) {
-  // Read the auth state hydrated into the root route context.
-  const routeContext = useRouteContext({
-    from: '__root__',
-    select: (ctx: { auth0?: Auth0RouterContext }) => ctx.auth0,
-  }) as Auth0RouterContext | undefined
+  // Read the auth state hydrated into the route context. `useRouteContext`
+  // throws if `from` is not a real route id, so translate that into a clear SDK
+  // message rather than an opaque router error. This surfaces the common
+  // misconfiguration where the root route is named or structured differently.
+  let routeContext: Auth0RouterContext | undefined
+  try {
+    routeContext = useRouteContext({
+      from,
+      select: (ctx: { auth0?: Auth0RouterContext }) => ctx.auth0,
+    }) as Auth0RouterContext | undefined
+  } catch (error) {
+    throw new Error(
+      `Auth0Provider could not read the route context from "${from}". Ensure ` +
+        `auth0BeforeLoad() is set on that route (usually __root.tsx). If your ` +
+        `root route uses a different id, pass it via the Auth0Provider "from" prop.`,
+      { cause: error },
+    )
+  }
 
   const [authState] = useState<Auth0RouterContext>(
     () =>
@@ -107,6 +127,10 @@ export function Auth0Provider({
   const current = routeContext ?? authState
 
   const value = useMemo<Auth0ContextValue>(() => {
+    // login/logout use a hard browser navigation (not TanStack Router) on
+    // purpose: the auth routes are server-handled and the browser must reload so
+    // a fresh session cookie is read. This intentionally bypasses the router's
+    // client-side transition.
     const navigate = (href: string) => {
       window.location.assign(href)
     }

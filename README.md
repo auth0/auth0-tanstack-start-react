@@ -88,6 +88,10 @@ keeps each helper easy to wrap in a `createServerFn()`. If you are migrating fro
 - Hooks: `useAuth0`, `useUser`, `useOrg`, `useLogin`, `useLogout`, and `useMfa`.
 - Components: `SignedIn`, `SignedOut`, `HasOrg`, `AuthReady`, and `AuthLoading`.
 
+`useLogin` and `useLogout` perform a full browser navigation (not a TanStack Router
+transition), because the `/auth/*` routes are handled on the server and the browser must
+reload to pick up the new session cookie.
+
 **Server-side tokens**
 
 - Read the session and access tokens on the server with `getSession(auth0)`, `getAccessToken(auth0)`,
