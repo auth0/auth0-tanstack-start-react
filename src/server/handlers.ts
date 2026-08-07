@@ -182,12 +182,22 @@ export async function handleCallback(auth0: Auth0Instance): Promise<Response> {
 
 /**
  * Handles `GET <base>/logout`. Clears the local session and redirects to Auth0's
- * logout endpoint, which returns the user to `appBaseUrl`.
+ * logout endpoint, which returns the user to a post-logout destination. A
+ * `returnTo` query param is honored when it is same-origin (validated with
+ * `toSafeRedirect`); otherwise the app's base URL is used. The chosen value
+ * must also be registered as an Allowed Logout URL in the Auth0 Dashboard.
  */
 export async function handleLogout(auth0: Auth0Instance): Promise<Response> {
   const request = getRequest()
+  const url = new URL(request.url)
   const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
-  const logoutUrl = await auth0.client.logout({ returnTo: appBaseUrl })
+
+  const rawReturnTo = url.searchParams.get('returnTo')
+  const returnTo = rawReturnTo
+    ? (toSafeRedirect(rawReturnTo, appBaseUrl) ?? appBaseUrl)
+    : appBaseUrl
+
+  const logoutUrl = await auth0.client.logout({ returnTo })
   return redirect(logoutUrl.toString())
 }
 
