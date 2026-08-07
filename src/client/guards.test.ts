@@ -26,6 +26,12 @@ describe('requireAuth', () => {
     expect(runGuard(requireAuth(), ctx)).toBeDefined()
   })
 
+  it('forces a full-document navigation so the auth route is not matched internally', () => {
+    const ctx = createMockAuth0Context()
+    const thrown = runGuard(requireAuth(), ctx) as { options?: { reloadDocument?: boolean } }
+    expect(thrown.options?.reloadDocument).toBe(true)
+  })
+
   it('no-ops while auth is still loading', () => {
     const ctx = createMockAuth0Context({ status: 'loading' })
     expect(runGuard(requireAuth(), ctx)).toBeUndefined()

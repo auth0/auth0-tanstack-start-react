@@ -13,6 +13,7 @@ vi.mock('@tanstack/react-router', () => ({
 import {
   auth0FunctionMiddleware,
   requireAuthMiddleware,
+  requireOrgMiddleware,
   withApiAuth,
   withApiScopes,
   withApiOrg,
@@ -92,6 +93,40 @@ describe('requireAuthMiddleware', () => {
   it('redirects when unauthenticated', async () => {
     const { thrown } = await runServer(requireAuthMiddleware(mockAuth0(undefined)))
     expect((thrown as Error).message).toBe('REDIRECT')
+  })
+
+  it('forces a full-document navigation to the auth route', async () => {
+    const { thrown } = await runServer(requireAuthMiddleware(mockAuth0(undefined)))
+    const opts = (thrown as { redirectOpts: { reloadDocument?: boolean } }).redirectOpts
+    expect(opts.reloadDocument).toBe(true)
+  })
+})
+
+describe('requireOrgMiddleware', () => {
+  it('passes when the org_id matches', async () => {
+    const { thrown, next } = await runServer(
+      requireOrgMiddleware(mockAuth0(authedSession({ org_id: 'org_1' })), 'org_1'),
+    )
+    expect(thrown).toBeUndefined()
+    expect(next).toHaveBeenCalled()
+  })
+
+  it('redirects with a full-document navigation on org mismatch', async () => {
+    const { thrown } = await runServer(
+      requireOrgMiddleware(mockAuth0(authedSession({ org_id: 'org_2' })), 'org_1'),
+    )
+    const opts = (thrown as { redirectOpts: { href: string; reloadDocument?: boolean } })
+      .redirectOpts
+    expect(opts.href).toBe('/auth/login?organization=org_1')
+    expect(opts.reloadDocument).toBe(true)
+  })
+
+  it('redirects with a full-document navigation when unauthenticated', async () => {
+    const { thrown } = await runServer(
+      requireOrgMiddleware(mockAuth0(undefined), 'org_1'),
+    )
+    const opts = (thrown as { redirectOpts: { reloadDocument?: boolean } }).redirectOpts
+    expect(opts.reloadDocument).toBe(true)
   })
 })
 
