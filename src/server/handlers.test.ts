@@ -105,6 +105,33 @@ describe('auth0Handlers GET dispatch', () => {
     expect(res.headers.get('Location')).toContain('t.auth0.com/v2/logout')
   })
 
+  it('logout → returnTo defaults to appBaseUrl when not provided', async () => {
+    const auth0 = mockAuth0()
+    setRequest('/auth/logout')
+    await auth0Handlers(auth0).GET()
+    expect(auth0.client.logout).toHaveBeenCalledWith({
+      returnTo: 'http://localhost:3000',
+    })
+  })
+
+  it('logout → honors a same-origin returnTo query param', async () => {
+    const auth0 = mockAuth0()
+    setRequest('/auth/logout?returnTo=/goodbye')
+    await auth0Handlers(auth0).GET()
+    expect(auth0.client.logout).toHaveBeenCalledWith({
+      returnTo: 'http://localhost:3000/goodbye',
+    })
+  })
+
+  it('logout → drops an off-origin returnTo and falls back to appBaseUrl', async () => {
+    const auth0 = mockAuth0()
+    setRequest('/auth/logout?returnTo=https://evil.example.com/phish')
+    await auth0Handlers(auth0).GET()
+    expect(auth0.client.logout).toHaveBeenCalledWith({
+      returnTo: 'http://localhost:3000',
+    })
+  })
+
   it('profile → user JSON, marked no-store so the PII is never cached', async () => {
     const auth0 = mockAuth0()
     setRequest('/auth/profile')
