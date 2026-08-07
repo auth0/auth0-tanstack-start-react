@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 // Capture the options passed to the foundation's store + client so we can assert
 // that our sessionConfiguration is forwarded (H3: it used to be silently dropped).
 const statelessArgs: unknown[] = []
+const statefulArgs: unknown[] = []
 const serverClientArgs: unknown[] = []
 
 // These classes are instantiated with `new` in auth0-server.ts, so the mocks
@@ -20,7 +21,8 @@ vi.mock('@auth0/auth0-server-js', () => ({
     statelessArgs.push(opts)
     return { __stateless: true }
   }),
-  StatefulStateStore: vi.fn(function () {
+  StatefulStateStore: vi.fn(function (opts: unknown) {
+    statefulArgs.push(opts)
     return { __stateful: true }
   }),
 }))
@@ -43,6 +45,7 @@ const BASE = {
 
 beforeEach(() => {
   statelessArgs.length = 0
+  statefulArgs.length = 0
   serverClientArgs.length = 0
   vi.clearAllMocks()
 })
@@ -123,5 +126,45 @@ describe('auth0Server domain resolver (Multiple Custom Domains)', () => {
       authorizationParams: { redirect_uri?: string }
     }
     expect(clientOpts.authorizationParams.redirect_uri).toBeUndefined()
+  })
+})
+
+describe('auth0Server session store selection', () => {
+  it('uses the stateless store by default (no sessionStore)', () => {
+    auth0Server(BASE)
+    expect(statelessArgs).toHaveLength(1)
+    expect(statefulArgs).toHaveLength(0)
+  })
+
+  it('uses the stateful store and forwards the store + secret when sessionStore is provided', () => {
+    const store = {
+      get: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+      deleteByLogoutToken: vi.fn(),
+    }
+    auth0Server({ ...BASE, sessionStore: store })
+
+    expect(statelessArgs).toHaveLength(0)
+    expect(statefulArgs).toHaveLength(1)
+    const opts = statefulArgs[0] as Record<string, unknown>
+    expect(opts.store).toBe(store)
+    expect(opts.secret).toBe('x'.repeat(32))
+  })
+
+  it('forwards sessionConfiguration to the stateful store', () => {
+    const store = {
+      get: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+      deleteByLogoutToken: vi.fn(),
+    }
+    auth0Server({
+      ...BASE,
+      sessionStore: store,
+      sessionConfiguration: { absoluteDuration: 999 },
+    })
+    const opts = statefulArgs[0] as Record<string, unknown>
+    expect(opts.absoluteDuration).toBe(999)
   })
 })
