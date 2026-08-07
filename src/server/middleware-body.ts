@@ -13,17 +13,28 @@ import type { Auth0ServerOptions } from '../types/index.js'
  * standard way to satisfy TanStack Start's import-protection for server-only code.)
  */
 
-// Cache the instance so it is constructed once per server process, not per request.
-let cachedInstance: Auth0Instance | undefined
-let cachedKey: string | undefined
+// Cache the instance so it is constructed once per server process, not per
+// request. `auth0Middleware(options)` is called once at startup, so the options
+// object is a stable reference for the whole process; we key on that identity
+// with a WeakMap. Keying on `JSON.stringify(options)` would be wrong: it drops
+// function values, so a `domain` set to a `DomainResolver` serializes to the
+// same key as no config, collapsing different resolver configs onto one
+// instance and using the wrong Auth0 domain (SDK-10662).
+const instanceByOptions = new WeakMap<Auth0ServerOptions, Auth0Instance>()
+// Separate slot for the common `auth0Middleware()` (no options) call, which has
+// no object to key a WeakMap on.
+let defaultInstance: Auth0Instance | undefined
 
 function resolveInstance(options?: Auth0ServerOptions): Auth0Instance {
-  const key = JSON.stringify(options ?? {})
-  if (!cachedInstance || cachedKey !== key) {
-    cachedInstance = auth0Server(options ?? {})
-    cachedKey = key
+  if (!options) {
+    return (defaultInstance ??= auth0Server())
   }
-  return cachedInstance
+  let instance = instanceByOptions.get(options)
+  if (!instance) {
+    instance = auth0Server(options)
+    instanceByOptions.set(options, instance)
+  }
+  return instance
 }
 
 export interface MiddlewareBodyArgs {
