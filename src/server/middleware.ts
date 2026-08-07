@@ -12,7 +12,7 @@ import type { Auth0RouterContext } from '../types/index.js'
  */
 async function readAuthContext(auth0: Auth0Instance): Promise<Auth0RouterContext> {
   const session = await auth0.client.getSession()
-  return toAuth0RouterContext(session)
+  return toAuth0RouterContext(session, auth0.config.excludedClaims)
 }
 
 function authBasePath(auth0: Auth0Instance): string {
@@ -96,7 +96,9 @@ export function withApiScopes(auth0: Auth0Instance, scopes: string[]) {
     if (missing.length > 0) {
       throw new ForbiddenError(`Missing required scope(s): ${missing.join(', ')}`)
     }
-    return next({ context: { auth0: toAuth0RouterContext(session) } })
+    return next({
+      context: { auth0: toAuth0RouterContext(session, auth0.config.excludedClaims) },
+    })
   })
 }
 

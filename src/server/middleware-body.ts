@@ -71,5 +71,7 @@ export async function middlewareBody(
   }
 
   const session = await auth0.client.getSession()
-  return args.next({ context: { auth0: toAuth0RouterContext(session) } })
+  return args.next({
+    context: { auth0: toAuth0RouterContext(session, auth0.config.excludedClaims) },
+  })
 }

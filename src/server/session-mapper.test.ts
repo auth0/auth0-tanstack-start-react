@@ -125,6 +125,33 @@ describe('toAuth0RouterContext', () => {
     expect(serialized).not.toContain('id-token')
     expect(ctx).not.toHaveProperty('session')
   })
+
+  it('strips excludedClaims from the user before it reaches the client', () => {
+    const session = foundationSession({
+      user: {
+        sub: 'auth0|123',
+        email: 'a@example.com',
+        iss: 'https://tenant.auth0.com/',
+        aud: 'client-id',
+        sid: 'session-id',
+        iat: 1735686000,
+        exp: 1735689600,
+      },
+    } as Partial<FoundationSessionData>)
+    const ctx = toAuth0RouterContext(session, ['iss', 'aud', 'iat', 'exp', 'sid'])
+    expect(ctx.user).toEqual({ sub: 'auth0|123', email: 'a@example.com' })
+    const serialized = JSON.stringify(ctx)
+    expect(serialized).not.toContain('client-id')
+    expect(serialized).not.toContain('session-id')
+  })
+
+  it('keeps every claim when excludedClaims is empty or omitted', () => {
+    const session = foundationSession({
+      user: { sub: 'auth0|123', sid: 'session-id' },
+    } as Partial<FoundationSessionData>)
+    expect(toAuth0RouterContext(session, []).user).toHaveProperty('sid')
+    expect(toAuth0RouterContext(session).user).toHaveProperty('sid')
+  })
 })
 
 describe('toTokenSet', () => {

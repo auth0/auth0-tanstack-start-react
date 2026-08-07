@@ -48,6 +48,18 @@ describe('getConfig', () => {
     expect(cfg.clientId).toBe('client-id')
   })
 
+  it('defaults excludedClaims to the internal OIDC claims', () => {
+    const cfg = getConfig(VALID)
+    expect(cfg.excludedClaims).toEqual(['iss', 'aud', 'iat', 'exp', 'sid'])
+  })
+
+  it('honors an explicit excludedClaims override, including an empty array', () => {
+    expect(getConfig({ ...VALID, excludedClaims: ['sub'] }).excludedClaims).toEqual([
+      'sub',
+    ])
+    expect(getConfig({ ...VALID, excludedClaims: [] }).excludedClaims).toEqual([])
+  })
+
   it('reads from environment variables when options omitted', () => {
     process.env.AUTH0_DOMAIN = 'env.auth0.com'
     process.env.AUTH0_CLIENT_ID = 'env-client'
