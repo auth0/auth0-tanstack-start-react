@@ -148,6 +148,15 @@ Two TanStack Start conventions are worth knowing before you start:
 - **DPoP** (sender-constrained tokens) is not supported yet. DPoP is not provided by the underlying
   `@auth0/auth0-server-js`. It is planned for a future release, ideally once the foundation gains
   native support so that all Auth0 SDKs share one implementation.
+- **Passkeys on confidential clients** are currently blocked in the underlying
+  `@auth0/auth0-server-js`. `passkeyRegister()` and `passkeyChallenge()` do not forward the
+  `client_secret` to the registration and challenge endpoints, so a Regular Web Application (a
+  confidential client) receives `Invalid client credentials`. `passkeyGetToken()` is unaffected. A
+  fix in the foundation is required; passkeys on confidential clients will work once it ships.
+- **The transaction cookie is not marked `Secure`.** The short-lived `__a0_tx` cookie (the login
+  transaction state) is written by `@auth0/auth0-server-js` without the `Secure` attribute, unlike
+  the session cookie which is `Secure` by default. Until the foundation adds it, deploy over HTTPS
+  end to end so the cookie is never sent in cleartext. Its contents are encrypted regardless.
 - **SPA** (TanStack Router SPA or TanStack Start SPA mode) and **Resource Server** (API-only)
   deployments are out of scope for this SDK. Use
   [`@auth0/auth0-react`](https://github.com/auth0/auth0-react) for a TanStack Router SPA.
