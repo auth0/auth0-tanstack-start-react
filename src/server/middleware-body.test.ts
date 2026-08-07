@@ -27,8 +27,10 @@ vi.mock('./session-mapper.js', () => ({
 
 import { middlewareBody } from './middleware-body.js'
 import { auth0Handlers } from './handlers.js'
+import { auth0Server } from './auth0-server.js'
 
 const getHandlers = auth0Handlers as unknown as ReturnType<typeof vi.fn>
+const serverFactory = auth0Server as unknown as ReturnType<typeof vi.fn>
 
 function run(pathname: string, method = 'GET') {
   const next = vi.fn((arg: unknown) => ({ __next: true, arg }))
@@ -66,5 +68,41 @@ describe('middlewareBody auth base matching', () => {
     const { next } = await run('/dashboard')
     expect(getHandlers).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalled()
+  })
+})
+
+describe('instance caching by options identity (SDK-10662)', () => {
+  function call(options: Record<string, unknown>) {
+    const next = vi.fn((arg: unknown) => arg)
+    return middlewareBody(
+      { request: new Request('http://localhost/dashboard'), pathname: '/dashboard', next },
+      options,
+    )
+  }
+
+  it('reuses one instance for repeated calls with the same options object', async () => {
+    const before = serverFactory.mock.calls.length
+    const options = { domain: () => 'brand-a.auth0.com' }
+    await call(options)
+    await call(options)
+    await call(options)
+    // Built once, reused for the same reference.
+    expect(serverFactory.mock.calls.length - before).toBe(1)
+  })
+
+  it('builds separate instances for different resolver configs (does not collapse)', async () => {
+    const before = serverFactory.mock.calls.length
+    // Two distinct resolver configs. Under the old JSON.stringify key, both the
+    // functions serialize to undefined and collapse to the same cache entry.
+    await call({ domain: () => 'brand-a.auth0.com' })
+    await call({ domain: () => 'brand-b.auth0.com' })
+    expect(serverFactory.mock.calls.length - before).toBe(2)
+  })
+
+  it('does not collapse a resolver config onto a no-domain config', async () => {
+    const before = serverFactory.mock.calls.length
+    await call({ clientId: 'a' })
+    await call({ domain: () => 'brand-a.auth0.com' })
+    expect(serverFactory.mock.calls.length - before).toBe(2)
   })
 })
