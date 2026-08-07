@@ -334,8 +334,14 @@ export interface Auth0ServerOptions {
   domain?: string | DomainResolver
   clientId?: string
   clientSecret?: string
-  /** Session encryption secret (min 32 bytes). */
-  secret?: string
+  /**
+   * Session encryption secret. Each secret must be at least 32 bytes.
+   *
+   * Pass an array to rotate the secret with zero downtime: the first entry
+   * encrypts new sessions, and every entry can decrypt existing ones. To rotate,
+   * prepend the new secret and keep the old one until existing sessions expire.
+   */
+  secret?: string | string[]
   /**
    * The application base URL. Required with a string `domain`. Optional with a
    * {@link DomainResolver}, where it is inferred per request from the
