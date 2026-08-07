@@ -47,7 +47,7 @@ export interface ResolvedConfig extends Auth0ServerOptions {
   domain: string | DomainResolver
   clientId: string
   clientSecret: string
-  secret: string
+  secret: string | string[]
   /**
    * The configured app base URL, or `undefined` in resolver mode where it is
    * inferred per request. Use {@link resolveAppBaseUrl} to get a concrete URL.
@@ -84,11 +84,16 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
   // With a static string domain, `appBaseUrl` is still required.
   const usesDomainResolver = typeof domain === 'function'
 
+  // `secret` may be a single string or an array of strings. An array enables
+  // zero-downtime key rotation: the first entry encrypts new sessions, and every
+  // entry can decrypt existing ones. An empty array counts as missing.
+  const hasSecret = Array.isArray(secret) ? secret.length > 0 : Boolean(secret)
+
   const missing: string[] = []
   if (!domain) missing.push('domain (AUTH0_DOMAIN)')
   if (!clientId) missing.push('clientId (AUTH0_CLIENT_ID)')
   if (!clientSecret) missing.push('clientSecret (AUTH0_CLIENT_SECRET)')
-  if (!secret) missing.push('secret (AUTH0_SECRET)')
+  if (!hasSecret) missing.push('secret (AUTH0_SECRET)')
   if (!appBaseUrl && !usesDomainResolver) missing.push('appBaseUrl (APP_BASE_URL)')
 
   if (missing.length > 0) {
@@ -98,7 +103,9 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
     )
   }
 
-  if (Buffer.byteLength(secret!, 'utf8') < 32) {
+  // Every secret (each rotation key) must meet the minimum length.
+  const secrets = Array.isArray(secret) ? secret : [secret!]
+  if (secrets.some((s) => Buffer.byteLength(s, 'utf8') < 32)) {
     throw new InvalidConfigurationError(
       'Auth0 `secret` must be at least 32 bytes. Generate one with `openssl rand -hex 32`.',
     )

@@ -118,6 +118,26 @@ describe('getConfig', () => {
       /at least 32 bytes/,
     )
   })
+
+  it('accepts an array of secrets for rotation', () => {
+    const cfg = getConfig({
+      ...VALID,
+      secret: ['x'.repeat(32), 'y'.repeat(40)],
+    })
+    expect(cfg.secret).toEqual(['x'.repeat(32), 'y'.repeat(40)])
+  })
+
+  it('rejects a secret array when any entry is too short', () => {
+    expect(() =>
+      getConfig({ ...VALID, secret: ['x'.repeat(32), 'too-short'] }),
+    ).toThrow(/at least 32 bytes/)
+  })
+
+  it('treats an empty secret array as missing', () => {
+    expect(() => getConfig({ ...VALID, secret: [] })).toThrow(
+      /secret \(AUTH0_SECRET\)/,
+    )
+  })
 })
 
 describe('getConfig insecure cookie warning', () => {
