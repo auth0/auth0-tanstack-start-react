@@ -60,6 +60,11 @@ export function requireAuth(options: GuardOptions = {}) {
         href: returnTo
           ? `${loginPath}?returnTo=${encodeURIComponent(returnTo)}`
           : loginPath,
+        // The auth routes are handled at the HTTP middleware layer, not in the
+        // router tree. Without this, a client-side navigation makes the router
+        // try to match `/auth/login` internally and 404. Forcing a full-document
+        // navigation lets the server middleware handle the redirect.
+        reloadDocument: true,
       })
     }
   }
@@ -80,6 +85,7 @@ export function requireOrg(orgId: string, options: GuardOptions = {}) {
     if (!context.auth0.isAuthenticated || context.auth0.user?.org_id !== orgId) {
       throw redirect({
         href: `${loginPath}?organization=${encodeURIComponent(orgId)}`,
+        reloadDocument: true,
       })
     }
   }
