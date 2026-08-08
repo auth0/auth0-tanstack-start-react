@@ -39,7 +39,7 @@ export function requireAuthMiddleware(auth0: Auth0Instance) {
   return createMiddleware({ type: 'function' }).server(async ({ next }) => {
     const auth0Context = await readAuthContext(auth0)
     if (!auth0Context.isAuthenticated) {
-      throw redirect({ href: loginPath })
+      throw redirect({ href: loginPath, reloadDocument: true })
     }
     return next({ context: { auth0: auth0Context } })
   })
@@ -53,10 +53,10 @@ export function requireOrgMiddleware(auth0: Auth0Instance, orgId: string) {
   return createMiddleware({ type: 'function' }).server(async ({ next }) => {
     const auth0Context = await readAuthContext(auth0)
     if (!auth0Context.isAuthenticated) {
-      throw redirect({ href: `${loginPath}?organization=${orgId}` })
+      throw redirect({ href: `${loginPath}?organization=${orgId}`, reloadDocument: true })
     }
     if (auth0Context.user?.org_id !== orgId) {
-      throw redirect({ href: `${loginPath}?organization=${orgId}` })
+      throw redirect({ href: `${loginPath}?organization=${orgId}`, reloadDocument: true })
     }
     return next({ context: { auth0: auth0Context } })
   })
