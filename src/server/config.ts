@@ -16,6 +16,14 @@ import type {
 export const DEFAULT_AUDIENCE_KEY = 'default'
 
 /**
+ * Internal OIDC claims stripped from the user object before it is serialized
+ * into the SSR HTML (via the router context). These carry no display value and
+ * would otherwise expose the Auth0 client ID (`aud`) and session ID (`sid`) in
+ * the page source. Overridable per app via `excludedClaims`.
+ */
+export const DEFAULT_EXCLUDED_CLAIMS = ['iss', 'aud', 'iat', 'exp', 'sid']
+
+/**
  * Warns (in production only) when the session cookie is configured in a way
  * that weakens its protection. Auth0 defaults `secure` from the app's URL
  * protocol, so this only fires when a developer overrides it. We warn rather
@@ -53,6 +61,8 @@ export interface ResolvedConfig extends Auth0ServerOptions {
    * inferred per request. Use {@link resolveAppBaseUrl} to get a concrete URL.
    */
   appBaseUrl: AppBaseUrl | undefined
+  /** Claims stripped from the user object before it reaches the client HTML. */
+  excludedClaims: string[]
 }
 
 function envFirst(...keys: string[]): string | undefined {
@@ -121,6 +131,9 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
     secret: secret!,
     appBaseUrl: appBaseUrl,
     audience,
+    // An explicit array (including empty, to keep all claims) wins; otherwise
+    // strip the internal OIDC claims by default.
+    excludedClaims: options.excludedClaims ?? DEFAULT_EXCLUDED_CLAIMS,
   }
 }
 

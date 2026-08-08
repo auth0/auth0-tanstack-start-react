@@ -361,4 +361,12 @@ export interface Auth0ServerOptions {
   sessionConfiguration?: SessionConfiguration
   routes?: RoutesConfig
   authorizationParams?: AuthorizationParameters
+  /**
+   * ID-token claims to strip from the user object before it is dehydrated into
+   * the SSR HTML via the router context. Internal OIDC claims (`iss`, `aud`,
+   * `iat`, `exp`, `sid`) carry no display value and expose the client ID and
+   * session ID in the page source, so they are excluded by default. Pass an
+   * array to override the default set (an empty array keeps every claim).
+   */
+  excludedClaims?: string[]
 }
