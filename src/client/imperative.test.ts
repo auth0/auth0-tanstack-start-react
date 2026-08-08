@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 // redirect() throws a tagged object we can assert on without the router runtime.
 vi.mock('@tanstack/react-router', () => ({
-  redirect: (opts: { href: string }) => {
-    const err = new Error('REDIRECT') as Error & { href: string }
+  redirect: (opts: { href: string; reloadDocument?: boolean }) => {
+    const err = new Error('REDIRECT') as Error & {
+      href: string
+      reloadDocument?: boolean
+    }
     err.href = opts.href
+    err.reloadDocument = opts.reloadDocument
     return err
   },
 }))
@@ -22,11 +26,11 @@ const ctx: ImperativeContext = {
 }
 
 /** Captures the redirect error thrown by an imperative helper. */
-function catchRedirect(fn: () => never): { href: string } {
+function catchRedirect(fn: () => never): { href: string; reloadDocument?: boolean } {
   try {
     fn()
   } catch (e) {
-    return e as { href: string }
+    return e as { href: string; reloadDocument?: boolean }
   }
   throw new Error('expected a redirect to be thrown')
 }
@@ -46,6 +50,10 @@ describe('login', () => {
       '/signin',
     )
   })
+
+  it('forces a full-document navigation', () => {
+    expect(catchRedirect(() => login(ctx)).reloadDocument).toBe(true)
+  })
 })
 
 describe('logout', () => {
@@ -57,5 +65,9 @@ describe('logout', () => {
     expect(
       catchRedirect(() => logout(ctx, { logoutPath: '/signout' })).href,
     ).toBe('/signout')
+  })
+
+  it('forces a full-document navigation', () => {
+    expect(catchRedirect(() => logout(ctx)).reloadDocument).toBe(true)
   })
 })
