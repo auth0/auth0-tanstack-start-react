@@ -4,6 +4,7 @@ import {
   toAuth0RouterContext,
   toTokenSet,
 } from './session-mapper.js'
+import { getConfig } from './config.js'
 import type { SessionData as FoundationSessionData } from '@auth0/auth0-server-js'
 
 function foundationSession(
@@ -151,6 +152,38 @@ describe('toAuth0RouterContext', () => {
     } as Partial<FoundationSessionData>)
     expect(toAuth0RouterContext(session, []).user).toHaveProperty('sid')
     expect(toAuth0RouterContext(session).user).toHaveProperty('sid')
+  })
+
+  it('strips the internal OIDC claims end-to-end using the default from getConfig', () => {
+    // Connects the two halves: getConfig produces the default excludedClaims, and
+    // the mapper consumes them. Nothing is hand-passed here, so this proves the
+    // wired default (not an explicit array) actually strips iss/aud/sid/iat/exp.
+    const config = getConfig({
+      domain: 'tenant.auth0.com',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      secret: 'x'.repeat(32),
+      appBaseUrl: 'https://app.example.com',
+    })
+    const session = foundationSession({
+      user: {
+        sub: 'auth0|123',
+        email: 'a@example.com',
+        iss: 'https://tenant.auth0.com/',
+        aud: 'client-id',
+        sid: 'session-id',
+        iat: 1735686000,
+        exp: 1735689600,
+      },
+    } as Partial<FoundationSessionData>)
+    const ctx = toAuth0RouterContext(session, config.excludedClaims)
+    expect(ctx.user).not.toHaveProperty('aud')
+    expect(ctx.user).not.toHaveProperty('sid')
+    expect(ctx.user).not.toHaveProperty('iss')
+    expect(ctx.user).not.toHaveProperty('iat')
+    expect(ctx.user).not.toHaveProperty('exp')
+    // Display claims survive.
+    expect(ctx.user).toEqual({ sub: 'auth0|123', email: 'a@example.com' })
   })
 })
 
