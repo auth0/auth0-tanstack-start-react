@@ -56,20 +56,42 @@ export function toSessionData(
 }
 
 /**
+ * Removes `excludedClaims` from a user object. Returns a new object; leaves the
+ * original session untouched. A missing/empty list is a no-op.
+ */
+function stripExcludedClaims(
+  user: User,
+  excludedClaims: string[] | undefined,
+): User {
+  if (!excludedClaims || excludedClaims.length === 0) return user
+  const excluded = new Set(excludedClaims)
+  return Object.fromEntries(
+    Object.entries(user).filter(([key]) => !excluded.has(key)),
+  ) as User
+}
+
+/**
  * Maps a foundation session into the router-facing {@link Auth0RouterContext}.
  *
  * Deliberately carries ONLY non-secret display claims (`user`,
  * `isAuthenticated`). No tokens or session body: this context is dehydrated into
  * the client HTML by TanStack Router, so putting tokens here would expose them
  * to the browser. Server code reads tokens via `getSession`/`getAccessToken`.
+ *
+ * `excludedClaims` strips internal OIDC claims (e.g. `iss`, `aud`, `sid`) from
+ * the user object before it reaches the HTML, so the client ID and session ID
+ * are not exposed in the page source.
  */
 export function toAuth0RouterContext(
   session: FoundationSessionData | undefined,
+  excludedClaims?: string[],
 ): Auth0RouterContext {
   // The router context carries no tokens, so the audience is irrelevant here.
   const data = toSessionData(session)
   return {
-    user: data?.user,
+    user: data?.user
+      ? stripExcludedClaims(data.user, excludedClaims)
+      : undefined,
     isAuthenticated: data !== null,
     // RWA/SSR: auth state is resolved server-side before any HTML is sent.
     status: 'resolved',

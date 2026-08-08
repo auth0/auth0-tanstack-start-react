@@ -38,8 +38,9 @@ A complete, runnable version of the setup basics lives in
 
 18. [Session configuration](#18-session-configuration)
 19. [Stateful session store](#19-stateful-session-store)
-20. [Error handling](#20-error-handling)
-21. [Testing](#21-testing)
+20. [Controlling which claims reach the browser](#20-controlling-which-claims-reach-the-browser)
+21. [Error handling](#21-error-handling)
+22. [Testing](#22-testing)
 
 ---
 
@@ -798,7 +799,31 @@ control, so treat it the same way you would treat any store of sensitive data.
 > `/auth/backchannel-logout` endpoint cannot end the session and responds with a `501` configuration
 > error. To use back-channel logout, configure a `sessionStore` as shown above.
 
-## 20. Error handling
+## 20. Controlling which claims reach the browser
+
+The user object from the session is dehydrated into the server-rendered HTML so that
+`context.auth0.user` and `useUser()` are populated on first paint. Tokens are never included, but the
+raw ID-token claims are — including internal OIDC claims such as `iss`, `aud`, `iat`, `exp`, and
+`sid`, which have no display value and expose the Auth0 client ID (`aud`) and session ID (`sid`) in
+the page source.
+
+The SDK strips those five claims by default. Pass `excludedClaims` to change the set:
+
+```ts
+import { auth0Server } from '@auth0/auth0-tanstack-start-react/server'
+
+export const auth0 = auth0Server({
+  // ...rest of your config
+  // Also strip a custom internal claim from the client-visible user object.
+  excludedClaims: ['iss', 'aud', 'iat', 'exp', 'sid', 'https://example.com/internal'],
+})
+```
+
+The claims are removed only from the client-facing router context. Server-side reads via
+`getSession(auth0)` still return the full user object, so a server function or loader can read a
+claim you excluded from the HTML. Pass an empty array (`excludedClaims: []`) to keep every claim.
+
+## 21. Error handling
 
 The SDK throws typed error classes from the `/errors` entry point. Every SDK error extends the
 built-in `Error` and carries a stable `code`, so you can branch on the class or the code.
@@ -836,7 +861,7 @@ so you can check them with `instanceof`: `MfaChallengeError`, `MfaEnrollmentErro
 `MfaListAuthenticatorsError`, `MfaVerifyError`, `StartLinkUserError`, `PasskeyChallengeError`,
 `PasskeyGetTokenError`, and `PasskeyRegisterError`, plus the `isMfaRequiredError` helper.
 
-## 21. Testing
+## 22. Testing
 
 The `/testing` entry point provides utilities for component tests, router-guard tests, and SSR
 integration tests.
