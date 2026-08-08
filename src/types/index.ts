@@ -103,8 +103,12 @@ export interface AccessTokenResponse {
 export interface Organization {
   /** `org_id` from the ID token. */
   id: string
-  /** `org_name` URL slug from the ID token. */
-  name: string
+  /**
+   * `org_name` URL slug from the ID token. Optional because the `org_name`
+   * claim is only present when the tenant adds it, so it is omitted rather than
+   * reported as an empty string when absent.
+   */
+  name?: string
   /** Human-readable name; NOT in the JWT by default (requires an Action). */
   display_name?: string
 }

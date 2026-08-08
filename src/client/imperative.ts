@@ -18,7 +18,10 @@ export function login(
   const href = options.returnTo
     ? `${loginPath}?returnTo=${encodeURIComponent(options.returnTo)}`
     : loginPath
-  throw redirect({ href })
+  // The auth routes live at the HTTP middleware layer, not in the router tree,
+  // so a relative redirect must force a full-document navigation or the router
+  // 404s trying to match it internally.
+  throw redirect({ href, reloadDocument: true })
 }
 
 /**
@@ -30,5 +33,5 @@ export function logout(
   options: LogoutOptions & { logoutPath?: string } = {},
 ): never {
   const logoutPath = options.logoutPath ?? '/auth/logout'
-  throw redirect({ href: logoutPath })
+  throw redirect({ href: logoutPath, reloadDocument: true })
 }
