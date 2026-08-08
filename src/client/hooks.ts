@@ -34,8 +34,11 @@ export function useLogout(): () => void {
 export function useOrg(): Organization | undefined {
   const { user } = useAuth0Context()
   if (!user?.org_id) return undefined
+  // Only include `name` when the `org_name` claim is actually present. Emitting
+  // an empty string would make a missing claim indistinguishable from an org
+  // that genuinely has no name.
   return {
     id: user.org_id,
-    name: user.org_name ?? '',
+    ...(user.org_name ? { name: user.org_name } : {}),
   }
 }

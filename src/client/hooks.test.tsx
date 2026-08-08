@@ -69,6 +69,14 @@ describe('useOrg', () => {
     })
     expect(result.current).toEqual({ id: 'org_1', name: 'acme' })
   })
+
+  it('omits name when the org_name claim is absent (does not fabricate an empty string)', () => {
+    const { result } = renderHook(() => useOrg(), {
+      wrapper: wrapper({ user: { sub: 'x', org_id: 'org_1' } }),
+    })
+    expect(result.current).toEqual({ id: 'org_1' })
+    expect(result.current).not.toHaveProperty('name')
+  })
 })
 
 describe('useLogin / useLogout', () => {
