@@ -162,11 +162,25 @@ export async function handleLogin(auth0: Auth0Instance): Promise<Response> {
  */
 export async function handleCallback(auth0: Auth0Instance): Promise<Response> {
   const request = getRequest()
+  const url = new URL(request.url)
   const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
+
+  // Auth0 signals a failed authorization by redirecting back with `error` /
+  // `error_description` query params (e.g. an invalid `organization`, a rejected
+  // consent, or a misconfigured client). The foundation's
+  // `completeInteractiveLogin` throws a bare `HTTPError` for these, which the
+  // framework surfaces as an unhandled 500. Detect the error response up front
+  // and raise a `CallbackError` so it flows through the SDK's error handling.
+  const authError = url.searchParams.get('error')
+  if (authError) {
+    throw new CallbackError(
+      url.searchParams.get('error_description') ?? authError,
+    )
+  }
 
   try {
     const { appState } = await auth0.client.completeInteractiveLogin<AppState>(
-      new URL(request.url),
+      url,
     )
     const returnTo =
       (appState?.returnTo && toSafeRedirect(appState.returnTo, appBaseUrl)) ||
