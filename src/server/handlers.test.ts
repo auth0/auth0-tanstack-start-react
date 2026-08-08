@@ -97,6 +97,29 @@ describe('auth0Handlers GET dispatch', () => {
     expect(res.headers.get('Location')).toBe('http://localhost:3000/dashboard')
   })
 
+  it('callback → throws CallbackError with error_description when Auth0 returns ?error=', async () => {
+    const auth0 = mockAuth0()
+    setRequest(
+      '/auth/callback?error=invalid_request&error_description=Organization%20not%20found',
+    )
+    await expect(auth0Handlers(auth0).GET()).rejects.toMatchObject({
+      name: 'CallbackError',
+      message: 'Organization not found',
+    })
+    // The failed authorization must not be handed to the foundation, which would
+    // throw a bare HTTPError surfaced as a 500.
+    expect(auth0.client.completeInteractiveLogin).not.toHaveBeenCalled()
+  })
+
+  it('callback → falls back to the error code when no error_description is present', async () => {
+    const auth0 = mockAuth0()
+    setRequest('/auth/callback?error=access_denied')
+    await expect(auth0Handlers(auth0).GET()).rejects.toMatchObject({
+      name: 'CallbackError',
+      message: 'access_denied',
+    })
+  })
+
   it('logout → 302 to Auth0 logout', async () => {
     const auth0 = mockAuth0()
     setRequest('/auth/logout')
