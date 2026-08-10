@@ -60,7 +60,7 @@
     "docs": "typedoc"
   },
   "dependencies": {
-    "@auth0/auth0-server-js": "^1.7.0"
+    "@auth0/auth0-server-js": "^1.12.1"
   },
   "peerDependencies": {
     "@tanstack/react-router": "^1.0.0",
