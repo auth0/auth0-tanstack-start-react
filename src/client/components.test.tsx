@@ -3,10 +3,11 @@ import { render, screen } from '@testing-library/react'
 import { createElement } from 'react'
 import { SignedIn, SignedOut, HasOrg, AuthReady, AuthLoading } from './components.js'
 import { Auth0TestProvider } from '../testing/index.js'
+import type { User } from '../types/index.js'
 
 function renderWith(
   ui: React.ReactNode,
-  props: { user?: Record<string, unknown>; isLoading?: boolean } = {},
+  props: { user?: Partial<User>; isLoading?: boolean } = {},
 ) {
   return render(
     createElement(Auth0TestProvider, { ...props, children: ui }),
