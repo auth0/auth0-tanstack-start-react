@@ -132,7 +132,7 @@ page can read.
 ## Quick start
 
 See [EXAMPLES.md](./EXAMPLES.md) for step-by-step walkthroughs, including the enterprise features. A
-complete, runnable app lives in [`examples/basic-rwa`](./examples/basic-rwa).
+complete, runnable app lives in [`examples/basic-oidc`](./examples/basic-oidc).
 
 Two TanStack Start conventions are worth knowing before you start:
 

@@ -4,7 +4,7 @@ Step-by-step walkthroughs for `@auth0/auth0-tanstack-start-react` on TanStack St
 (server-rendered Regular Web Applications).
 
 A complete, runnable version of the setup basics lives in
-[`examples/basic-rwa`](./examples/basic-rwa). The samples below match the patterns that app uses.
+[`examples/basic-oidc`](./examples/basic-oidc). The samples below match the patterns that app uses.
 
 ## Table of contents
 

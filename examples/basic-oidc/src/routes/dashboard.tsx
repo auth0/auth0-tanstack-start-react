@@ -34,12 +34,13 @@ function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Protected by <code className="text-xs">requireAuth()</code>. Try the SDK features below.
+            Session established. This route is protected by{' '}
+            <code className="text-xs">requireAuth()</code>.
           </p>
         </div>
         <Badge tone="green">
           <CheckCircle2 className="size-3.5" />
-          {isAuthenticated ? 'Authenticated' : 'Unknown'}
+          {isAuthenticated ? 'Signed in' : 'Unknown'}
         </Badge>
       </div>
 
