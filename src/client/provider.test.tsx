@@ -71,11 +71,14 @@ describe('Auth0Provider', () => {
     expect(result.current.isAuthenticated).toBe(false)
   })
 
-  it('logout invalidates the router', () => {
+  it('logout hard-navigates to the logout route without invalidating the router', () => {
     routeContextValue = RESOLVED
     const { result } = renderHook(() => useAuth0Context(), { wrapper })
     result.current.logout()
-    expect(invalidate).toHaveBeenCalled()
+    expect(window.location.assign).toHaveBeenCalledWith('/auth/logout')
+    // Invalidating would re-run a requireAuth guard on the current page and
+    // cancel the logout navigation (regression: logout logs the user back in).
+    expect(invalidate).not.toHaveBeenCalled()
   })
 
   it('throws a clear SDK error when the root route id is not found', () => {
