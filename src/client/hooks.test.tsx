@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
-import type { Auth0RouterContext } from '../types/index.js'
+import type { Auth0RouterContext, User } from '../types/index.js'
 
 // The real Auth0Provider (used by the useLogin/useLogout tests) reads router
 // context and the router instance. Mock both. Auth0TestProvider (used by the
@@ -19,7 +19,7 @@ import { Auth0TestProvider } from '../testing/index.js'
 import { Auth0Provider } from './provider.js'
 import { getClientAuthCache } from './auth-cache.js'
 
-function wrapper(props: { user?: Record<string, unknown> }) {
+function wrapper(props: { user?: Partial<User> }) {
   return ({ children }: { children: ReactNode }) =>
     createElement(Auth0TestProvider, { user: props.user, children })
 }
