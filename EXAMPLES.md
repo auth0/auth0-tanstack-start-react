@@ -401,7 +401,7 @@ The full middleware family:
 | `requireAuthMiddleware(auth0)` | Redirects to the login route. |
 | `requireOrgMiddleware(auth0, orgId)` | Redirects to the login route with the organization parameter. |
 | `withApiAuth(auth0)` | Throws `UnauthorizedError` (HTTP 401). |
-| `withApiScopes(auth0, scopes)` | Throws `ForbiddenError` (HTTP 403) when the access token is missing any scope. |
+| `withApiScopes(auth0, scopes, options?)` | Throws `ForbiddenError` (HTTP 403) when the access token is missing any scope. Pass `options.audience` to check a specific API's token instead of the configured audience. |
 | `withApiOrg(auth0, orgId)` | Throws `ForbiddenError` when `org_id` does not match. |
 | `withApiClaimEquals(auth0, claim, value)` | Throws `ForbiddenError` when the claim does not equal the value. |
 | `withApiClaimIncludes(auth0, claim, ...values)` | Throws `ForbiddenError` when the array claim includes none of the values. |

@@ -178,6 +178,57 @@ describe('withApiScopes', () => {
     const ok = await runServer(withApiScopes(auth0, ['read:x']))
     expect(ok.thrown).toBeUndefined()
   })
+
+  it('checks the audience passed in options, overriding the configured one', async () => {
+    const session = {
+      user: { sub: 'auth0|1' },
+      idToken: 'id',
+      refreshToken: 'r',
+      tokenSets: [
+        { audience: 'https://api.example.com', accessToken: 'a', scope: 'read:x', expiresAt: 9999999999 },
+        { audience: 'https://billing.example.com', accessToken: 'b', scope: 'read:invoices', expiresAt: 9999999999 },
+      ],
+      internal: { sid: 's', createdAt: 1 },
+    }
+    // Configured audience is the default api; check the billing audience instead.
+    const auth0 = mockAuth0(session, 'https://api.example.com')
+    const ok = await runServer(
+      withApiScopes(auth0, ['read:invoices'], { audience: 'https://billing.example.com' }),
+    )
+    expect(ok.thrown).toBeUndefined()
+    // read:invoices is NOT on the configured (default) audience.
+    const missing = await runServer(withApiScopes(auth0, ['read:invoices']))
+    expect(missing.thrown).toBeInstanceOf(ForbiddenError)
+  })
+
+  it('omits scope names from the message in production, keeps them on the cause', async () => {
+    const prev = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    try {
+      const { thrown } = await runServer(
+        withApiScopes(mockAuth0(authedSession()), ['write:y']),
+      )
+      const err = thrown as ForbiddenError & { cause?: { missingScopes?: string[] } }
+      expect(err.message).toBe('Insufficient scope.')
+      expect(err.message).not.toContain('write:y')
+      expect(err.cause?.missingScopes).toEqual(['write:y'])
+    } finally {
+      process.env.NODE_ENV = prev
+    }
+  })
+
+  it('includes scope names in the message outside production', async () => {
+    const prev = process.env.NODE_ENV
+    process.env.NODE_ENV = 'development'
+    try {
+      const { thrown } = await runServer(
+        withApiScopes(mockAuth0(authedSession()), ['write:y']),
+      )
+      expect((thrown as ForbiddenError).message).toContain('write:y')
+    } finally {
+      process.env.NODE_ENV = prev
+    }
+  })
 })
 
 describe('withApiOrg', () => {

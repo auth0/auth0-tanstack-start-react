@@ -76,25 +76,54 @@ export function withApiAuth(auth0: Auth0Instance) {
   })
 }
 
+/** Options for {@link withApiScopes}. */
+export interface WithApiScopesOptions {
+  /**
+   * Which API audience's token set to check the scopes against. Defaults to the
+   * audience configured on `auth0Server()`. Set this for a multi-audience app
+   * that needs to enforce scopes for a specific API other than the default.
+   */
+  audience?: string
+}
+
 /**
  * Throws {@link ForbiddenError} when the access token is missing any of the
  * required `scopes`. Chains auth internally.
+ *
+ * By default the scopes are checked against the token set for the audience
+ * configured on `auth0Server()`. Pass `options.audience` to check a specific
+ * audience instead.
  */
-export function withApiScopes(auth0: Auth0Instance, scopes: string[]) {
+export function withApiScopes(
+  auth0: Auth0Instance,
+  scopes: string[],
+  options: WithApiScopesOptions = {},
+) {
   return createMiddleware({ type: 'function' }).server(async ({ next }) => {
     // Read the granted scope from the server-side session, not the router
     // context (which carries no token/scope data). This is server middleware,
     // so direct session access is fine.
     const session = await auth0.client.getSession()
     if (!session?.user) throw new UnauthorizedError()
-    // Read the scope from the token set for the configured audience, not an
-    // arbitrary tokenSets[0], so multi-audience apps enforce the right token.
-    const audience = auth0.config.audience ?? DEFAULT_AUDIENCE_KEY
+    // Read the scope from the token set for the requested audience (or the
+    // configured one), not an arbitrary tokenSets[0], so multi-audience apps
+    // enforce the right token.
+    const audience =
+      options.audience ?? auth0.config.audience ?? DEFAULT_AUDIENCE_KEY
     const tokenSet = session.tokenSets.find((set) => set.audience === audience)
     const granted = (tokenSet?.scope ?? '').split(' ')
     const missing = scopes.filter((s) => !granted.includes(s))
     if (missing.length > 0) {
-      throw new ForbiddenError(`Missing required scope(s): ${missing.join(', ')}`)
+      // Do not echo the required scope names in production, so the exact
+      // authorization model is not disclosed to callers. The missing scopes are
+      // still attached to the error `cause` for server-side logging.
+      const message =
+        process.env.NODE_ENV === 'production'
+          ? 'Insufficient scope.'
+          : `Missing required scope(s): ${missing.join(', ')}`
+      throw new ForbiddenError(message, {
+        cause: { missingScopes: missing, audience },
+      })
     }
     return next({
       context: { auth0: toAuth0RouterContext(session, auth0.config.excludedClaims) },
