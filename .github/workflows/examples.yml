@@ -15,9 +15,14 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  basic-rwa:
-    name: basic-rwa
+  build:
+    name: ${{ matrix.example }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [basic-oidc, passkeys]
 
     steps:
       - name: Checkout code
@@ -35,15 +40,26 @@ jobs:
       - name: Install SDK dependencies
         run: npm install
 
-      # The example imports the SDK through a `file:../..` dependency, so the
-      # SDK must be built before the example can resolve and build against it.
+      # The examples import the SDK through a `file:../..` dependency, so the
+      # SDK must be built before an example can resolve and build against it.
       - name: Build the SDK
         run: npm run build
 
       - name: Install example dependencies
-        working-directory: examples/basic-rwa
+        working-directory: examples/${{ matrix.example }}
         run: npm install
 
+      # routeTree.gen.ts is generated and gitignored, so it is absent on a fresh
+      # checkout. Generate it before typecheck (the build step generates it on its
+      # own, but `tsc --noEmit` does not).
+      - name: Generate the route tree
+        working-directory: examples/${{ matrix.example }}
+        run: npm run generate-routes
+
+      - name: Typecheck the example
+        working-directory: examples/${{ matrix.example }}
+        run: npm run typecheck
+
       - name: Build the example
-        working-directory: examples/basic-rwa
+        working-directory: examples/${{ matrix.example }}
         run: npm run build

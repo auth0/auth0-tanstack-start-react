@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useRouteContext, useRouter } from '@tanstack/react-router'
+import { useRouteContext } from '@tanstack/react-router'
 import type {
   Auth0RouterContext,
   AuthorizationParameters,
@@ -123,7 +123,6 @@ export function Auth0Provider({
     if (routeContext) setClientAuthCache(routeContext)
   }, [routeContext])
 
-  const router = useRouter()
   const current = routeContext ?? authState
 
   const value = useMemo<Auth0ContextValue>(() => {
@@ -152,13 +151,18 @@ export function Auth0Provider({
         navigate(query ? `${loginPath}?${query}` : loginPath)
       },
       logout: () => {
+        // Clear the module cache, then hand off to the server logout route with a
+        // hard browser navigation. We deliberately do NOT call router.invalidate()
+        // here: the full-document navigation tears down and reloads the page, so
+        // any router state is discarded anyway. Invalidating first re-runs the
+        // current route's `beforeLoad` with the cache already cleared, which makes
+        // a `requireAuth` guard on the current page redirect to login and cancel
+        // the in-flight logout navigation (logout appears to log the user back in).
         clearClientAuthCache()
-        // Allow query-cache invalidation listeners to react before navigating.
-        void router.invalidate()
         navigate(logoutPath)
       },
     }
-  }, [current, loginPath, logoutPath, router])
+  }, [current, loginPath, logoutPath])
 
   return <Auth0Context.Provider value={value}>{children}</Auth0Context.Provider>
 }
