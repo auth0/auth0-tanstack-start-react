@@ -501,6 +501,13 @@ const url2 = await acceptOrgInvitation(auth0, { organization, invitation })
 The existing session is replaced atomically when the user completes the new login, so the old
 organization session cannot leak into the new one.
 
+> **`org_id` reflects the session, not live membership.** The `org_id` in the session (read via
+> `useOrg()` or the `org_id` claim) is fixed at login. If the user's organization membership or roles
+> change on the Auth0 side after they signed in, the session does not update on its own, so it can be
+> stale until the session is refreshed. A new login through `switchOrg` / `acceptOrgInvitation` (or
+> re-authentication) reconciles it. For decisions that must reflect the latest membership, verify
+> against Auth0 at that moment rather than trusting the session claim.
+
 ## 12. Account linking
 
 Account linking connects a secondary identity, such as a Google account, to the current user. It has
@@ -539,6 +546,14 @@ return new Response(null, { status: 302, headers: { Location: returnTo } })
 > origin before storing it, and the callback above validates it again before
 > redirecting. Never place `appState.returnTo` directly into a `Location` header
 > without `toSafeRedirect`.
+
+> **Re-validate the linked account in the callback.** The linking callback is
+> yours to own, so confirm the result before you act on it. `completeConnectAccount`
+> resolves the flow, but your app should still check that the linked identity is
+> the one the user intended and that it belongs to the currently signed-in user
+> (compare the session `sub`), and only then persist anything or show a success
+> state. Do not treat "callback reached" as "link verified". Decide what a valid
+> link means for your app and enforce it here.
 
 ## 13. CIBA back-channel authentication
 
