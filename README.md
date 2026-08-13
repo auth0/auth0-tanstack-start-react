@@ -145,9 +145,6 @@ Two TanStack Start conventions are worth knowing before you start:
 
 ## Known limitations
 
-- **DPoP** (sender-constrained tokens) is not supported yet. DPoP is not provided by the underlying
-  `@auth0/auth0-server-js`. It is planned for a future release, ideally once the foundation gains
-  native support so that all Auth0 SDKs share one implementation.
 - **The transaction cookie is not marked `Secure`.** The short-lived `__a0_tx` cookie (the login
   transaction state) is written by `@auth0/auth0-server-js` without the `Secure` attribute, unlike
   the session cookie which is `Secure` by default. Until the foundation adds it, deploy over HTTPS

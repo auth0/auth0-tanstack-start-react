@@ -41,6 +41,4 @@ tree-shakeable, client/server-split API.
 **Notes**
 
 - This is a beta release. APIs may change before the stable `1.0.0`.
-- DPoP is not yet supported; it depends on support in the underlying
-  `@auth0/auth0-server-js`. See the README "Known limitations" for the current
-  list.
+- See the README "Known limitations" for the current list.
