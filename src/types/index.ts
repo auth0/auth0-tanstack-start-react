@@ -109,8 +109,6 @@ export interface Organization {
    * reported as an empty string when absent.
    */
   name?: string
-  /** Human-readable name; NOT in the JWT by default (requires an Action). */
-  display_name?: string
 }
 
 /** OIDC authorization request parameters. */
