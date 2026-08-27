@@ -13,7 +13,11 @@ const APP_BASE_URL = 'https://app.example.com'
 function mockAuth0(fns: Record<string, ReturnType<typeof vi.fn>>): Auth0Instance {
   return {
     client: fns,
-    config: { appBaseUrl: APP_BASE_URL },
+    config: {
+      domain: 'tenant.auth0.com',
+      appBaseUrl: APP_BASE_URL,
+      trustProxy: false,
+    },
   } as unknown as Auth0Instance
 }
 
@@ -113,8 +117,25 @@ describe('completeConnectAccount', () => {
     const completeLinkUser = vi.fn().mockResolvedValue({ appState: { returnTo: '/x' } })
     const url = new URL('https://app.example.com/cb?code=1')
     const res = await completeConnectAccount(mockAuth0({ completeLinkUser }), url)
-    expect(completeLinkUser).toHaveBeenCalledWith(url)
+    expect(completeLinkUser.mock.calls[0]![0].toString()).toBe(
+      'https://app.example.com/cb?code=1',
+    )
     expect(res.appState).toEqual({ returnTo: '/x' })
+  })
+
+  it('rebuilds the origin from appBaseUrl, so the flow survives a TLS-terminating proxy', async () => {
+    // Behind such a proxy `new URL(getRequest().url)` carries the internal
+    // scheme and host. The code exchange re-sends redirect_uri derived from this
+    // URL, and Auth0 rejects it unless it matches the value that started the
+    // flow. The path and query the browser requested are kept as they are.
+    const completeLinkUser = vi.fn().mockResolvedValue({ appState: undefined })
+    await completeConnectAccount(
+      mockAuth0({ completeLinkUser }),
+      new URL('http://10.0.0.7:3000/auth/link-callback?code=1&state=2'),
+    )
+    expect(completeLinkUser.mock.calls[0]![0].toString()).toBe(
+      'https://app.example.com/auth/link-callback?code=1&state=2',
+    )
   })
 })
 
@@ -163,6 +184,19 @@ describe('completeDisconnectAccount', () => {
     const completeUnlinkUser = vi.fn().mockResolvedValue({ appState: undefined })
     const url = new URL('https://app.example.com/cb?code=2')
     await completeDisconnectAccount(mockAuth0({ completeUnlinkUser }), url)
-    expect(completeUnlinkUser).toHaveBeenCalledWith(url)
+    expect(completeUnlinkUser.mock.calls[0]![0].toString()).toBe(
+      'https://app.example.com/cb?code=2',
+    )
+  })
+
+  it('rebuilds the origin from appBaseUrl, like the linking callback does', async () => {
+    const completeUnlinkUser = vi.fn().mockResolvedValue({ appState: undefined })
+    await completeDisconnectAccount(
+      mockAuth0({ completeUnlinkUser }),
+      new URL('http://10.0.0.7:3000/auth/unlink-callback?code=2'),
+    )
+    expect(completeUnlinkUser.mock.calls[0]![0].toString()).toBe(
+      'https://app.example.com/auth/unlink-callback?code=2',
+    )
   })
 })

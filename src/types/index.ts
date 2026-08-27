@@ -323,6 +323,10 @@ export interface RoutesConfig {
  * `appBaseUrl` may be a single static URL, or an allow-list of permitted
  * origins (useful for staging/preview deployments). When omitted, it is
  * inferred from the incoming request.
+ *
+ * A single static URL needs no forwarded headers and is the safest choice. The
+ * other two forms pick the base URL per request, so behind a reverse proxy they
+ * also need {@link Auth0ServerOptions.trustProxy}.
  */
 export type AppBaseUrl = string | string[]
 
@@ -347,11 +351,39 @@ export interface Auth0ServerOptions {
    */
   secret?: string | string[]
   /**
-   * The application base URL. Required with a string `domain`. Optional with a
-   * {@link DomainResolver}, where it is inferred per request from the
-   * `X-Forwarded-Host` / `Host` and `X-Forwarded-Proto` headers.
+   * The public base URL of your application, for example
+   * `https://app.example.com`. This is the URL the browser uses, not the address
+   * your server listens on, so a single static string is correct even when the
+   * app runs behind a reverse proxy or a load balancer.
+   *
+   * Required with a string `domain`. Pass an array to allow several origins (a
+   * production domain plus preview deployments); the origin of each request must
+   * then match one entry. Optional with a {@link DomainResolver}, where it is
+   * inferred per request from the request host.
+   *
+   * Both of the per-request forms need {@link trustProxy} enabled when the app
+   * sits behind a proxy that terminates TLS.
    */
   appBaseUrl?: AppBaseUrl
+  /**
+   * Whether to trust the `X-Forwarded-Host` and `X-Forwarded-Proto` headers on
+   * incoming requests. Defaults to `false`. Also settable as
+   * `AUTH0_TRUST_PROXY=true`.
+   *
+   * Enable this only when every request reaches your app through a reverse proxy
+   * or load balancer that you control and that overwrites these headers. Any
+   * client can send them, so trusting them on a directly reachable server lets a
+   * caller state the wrong public origin for the request.
+   *
+   * You do not need this when `appBaseUrl` is a single static string: the SDK
+   * already knows your public origin and never reads the forwarded headers. It
+   * matters when `appBaseUrl` is an allow-list or when a {@link DomainResolver}
+   * is configured, because then the origin is derived from the request itself and
+   * a TLS-terminating proxy is the only party that still knows it.
+   *
+   * @default false
+   */
+  trustProxy?: boolean
   audience?: string
   /**
    * Session configuration, passed through to the foundation's session store.

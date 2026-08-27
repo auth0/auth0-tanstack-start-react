@@ -73,7 +73,7 @@ keeps each helper easy to wrap in a `createServerFn()`. If you are migrating fro
 
 - Login, callback, and logout handled server-side with an encrypted JWE session cookie.
 - Back-channel logout so Auth0 can end a user's session from the Dashboard or another app. This
-  requires a stateful `sessionStore`; see [EXAMPLES.md](./EXAMPLES.md#19-stateful-session-store).
+  requires a stateful `sessionStore`; see [EXAMPLES.md](./EXAMPLES.md#20-stateful-session-store).
 
 **Route protection**
 
@@ -108,9 +108,15 @@ reload to pick up the new session cookie.
 - Configure the session cookie and its lifetime through `sessionConfiguration`, and switch from
   stateless (encrypted cookie) sessions to stateful (server-stored) sessions with a `sessionStore`.
 - **Multiple Custom Domains**: serve several custom domains that front the same Auth0 tenant from one
-  app by passing a function to `domain`. The SDK picks the Auth0 domain per request and infers
+  app by passing a function to `domain`. The SDK picks the Auth0 domain per request and works out
   `appBaseUrl` from the request host. See
   [EXAMPLES.md](./EXAMPLES.md#17-multiple-custom-domains-mcd).
+- **Reverse proxies and load balancers**: a single static `appBaseUrl` already produces the right
+  `redirect_uri` behind a proxy that terminates TLS, with nothing to configure. The `appBaseUrl`
+  allow-list (for staging and preview deployments) and Multiple Custom Domains work out the origin per
+  request, so those need `trustProxy: true` (or `AUTH0_TRUST_PROXY=true`) to read `X-Forwarded-Host`
+  and `X-Forwarded-Proto`. See
+  [EXAMPLES.md](./EXAMPLES.md#18-running-behind-a-reverse-proxy).
 
 **Testing utilities**
 

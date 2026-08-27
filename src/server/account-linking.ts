@@ -3,6 +3,7 @@ import type { AuthorizationParameters } from '../types/index.js'
 import type { Auth0Instance } from './auth0-server.js'
 import { toSafeAppState } from './config.js'
 import {
+  normalizeCallbackUrl,
   perRequestAuthorizationParams,
   resolvePerRequestRedirect,
 } from './redirect-uri.js'
@@ -40,7 +41,7 @@ import {
  * export const Route = createFileRoute('/auth/link-callback')({
  *   server: { handlers: { GET: async () => {
  *     const request = getRequest()
- *     const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
+ *     const appBaseUrl = resolveAppBaseUrl(auth0.config, request)
  *     const { appState } = await completeConnectAccount(auth0, new URL(request.url))
  *     const returnTo = toSafeRedirect(appState?.returnTo ?? '/', appBaseUrl) ?? appBaseUrl
  *     return new Response(null, { status: 302, headers: { Location: returnTo } })
@@ -99,7 +100,7 @@ export async function connectAccount(
   return auth0.client.startLinkUser({
     connection: options.connection,
     connectionScope: options.connectionScope,
-    appState: toSafeAppState(auth0.config.appBaseUrl, options.returnTo, request),
+    appState: toSafeAppState(auth0.config, options.returnTo, request),
     authorizationParams: perRequestAuthorizationParams(
       options.authorizationParams,
       redirectUri,
@@ -111,12 +112,19 @@ export async function connectAccount(
  * Completes the account-linking flow at the callback. Reads the callback URL,
  * links the secondary identity into the session, and returns the stored
  * `appState` (e.g. `returnTo`).
+ *
+ * Pass the URL of the incoming callback request, typically
+ * `new URL(getRequest().url)`. Its origin is rebuilt from the app's own base URL
+ * before the code is exchanged, so the flow also works behind a reverse proxy
+ * that terminates TLS.
  */
 export async function completeConnectAccount<TAppState = { returnTo?: string }>(
   auth0: Auth0Instance,
   url: URL,
 ): Promise<{ appState?: TAppState }> {
-  return auth0.client.completeLinkUser<TAppState>(url)
+  return auth0.client.completeLinkUser<TAppState>(
+    normalizeCallbackUrl(auth0, url),
+  )
 }
 
 /**
@@ -156,7 +164,7 @@ export async function disconnectAccount(
   const { request, redirectUri } = resolvePerRequestRedirect(auth0)
   return auth0.client.startUnlinkUser({
     connection: options.connection,
-    appState: toSafeAppState(auth0.config.appBaseUrl, options.returnTo, request),
+    appState: toSafeAppState(auth0.config, options.returnTo, request),
     authorizationParams: perRequestAuthorizationParams(
       options.authorizationParams,
       redirectUri,
@@ -167,9 +175,16 @@ export async function disconnectAccount(
 /**
  * Completes the account-unlinking flow at the callback. Returns the stored
  * `appState` (e.g. `returnTo`).
+ *
+ * Pass the URL of the incoming callback request, typically
+ * `new URL(getRequest().url)`. Its origin is rebuilt from the app's own base URL
+ * before the code is exchanged, so the flow also works behind a reverse proxy
+ * that terminates TLS.
  */
 export async function completeDisconnectAccount<
   TAppState = { returnTo?: string },
 >(auth0: Auth0Instance, url: URL): Promise<{ appState?: TAppState }> {
-  return auth0.client.completeUnlinkUser<TAppState>(url)
+  return auth0.client.completeUnlinkUser<TAppState>(
+    normalizeCallbackUrl(auth0, url),
+  )
 }

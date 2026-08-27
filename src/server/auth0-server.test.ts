@@ -6,6 +6,13 @@ const statelessArgs: unknown[] = []
 const statefulArgs: unknown[] = []
 const serverClientArgs: unknown[] = []
 
+// The domain-resolver wrapper reads the ambient request via `getRequest()`. Mock
+// it so a test can drive what the wrapper sees on each call.
+let currentRequest: Request
+vi.mock('@tanstack/start-server-core', () => ({
+  getRequest: () => currentRequest,
+}))
+
 // These classes are instantiated with `new` in auth0-server.ts, so the mocks
 // use `function` (not arrow) implementations. vitest 4 rejects arrow-function
 // mocks used as constructors.
@@ -115,6 +122,56 @@ describe('auth0Server domain resolver (Multiple Custom Domains)', () => {
     }
     expect(typeof clientOpts.domain).toBe('function')
     expect(clientOpts.authorizationParams.redirect_uri).toBeUndefined()
+  })
+
+  it('invokes the resolver with the ambient request, resolving per call', async () => {
+    // The wrapper baked into the client has to read `getRequest()` at request
+    // time and hand it to the developer's resolver, so different hosts resolve to
+    // different tenants. This exercises the wrapper itself, not just that a
+    // function was forwarded.
+    const resolver = vi.fn(
+      (request: Request) =>
+        `${new URL(request.url).hostname.split('.')[0]}.auth0.com`,
+    )
+    auth0Server({
+      domain: resolver,
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      secret: 'x'.repeat(32),
+    })
+    const clientOpts = serverClientArgs[0] as {
+      domain: () => string | Promise<string>
+    }
+
+    currentRequest = new Request('https://brand-a.example.com/auth/login')
+    expect(await clientOpts.domain()).toBe('brand-a.auth0.com')
+    expect(resolver).toHaveBeenCalledWith(currentRequest)
+
+    currentRequest = new Request('https://brand-b.example.com/auth/login')
+    expect(await clientOpts.domain()).toBe('brand-b.auth0.com')
+  })
+
+  it('moves the baked redirect_uri when routes.base is customised', () => {
+    // The handler serving the callback derives its path from routes.base, so the
+    // baked redirect_uri has to follow it. When the two disagreed, Auth0 sent the
+    // browser to a path the SDK does not serve and login could never complete.
+    auth0Server({ ...BASE, routes: { base: '/authentication' } })
+    const clientOpts = serverClientArgs[0] as {
+      authorizationParams: { redirect_uri?: string }
+    }
+    expect(clientOpts.authorizationParams.redirect_uri).toBe(
+      'https://app.example.com/authentication/callback',
+    )
+  })
+
+  it('honours an individually overridden callback path', () => {
+    auth0Server({ ...BASE, routes: { callback: '/auth/oidc-callback' } })
+    const clientOpts = serverClientArgs[0] as {
+      authorizationParams: { redirect_uri?: string }
+    }
+    expect(clientOpts.authorizationParams.redirect_uri).toBe(
+      'https://app.example.com/auth/oidc-callback',
+    )
   })
 
   it('omits a baked redirect_uri when appBaseUrl is an allow-list', () => {

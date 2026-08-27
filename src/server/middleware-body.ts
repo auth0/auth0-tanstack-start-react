@@ -1,4 +1,5 @@
 import { auth0Server, type Auth0Instance } from './auth0-server.js'
+import { resolveRoutePaths } from './config.js'
 import { auth0Handlers } from './handlers.js'
 import { toAuth0RouterContext } from './session-mapper.js'
 import type { Auth0ServerOptions } from '../types/index.js'
@@ -60,7 +61,7 @@ export async function middlewareBody(
   options?: Auth0ServerOptions,
 ): Promise<unknown> {
   const auth0 = resolveInstance(options)
-  const base = auth0.config.routes?.base ?? '/auth'
+  const base = resolveRoutePaths(auth0.config).base
 
   // Match the base exactly or a path segment under it, so sibling routes like
   // `/authors` or `/authentication` are not mistaken for `/auth` endpoints.

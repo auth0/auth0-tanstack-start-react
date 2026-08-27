@@ -2,7 +2,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import type { Auth0Instance } from './auth0-server.js'
 import { toAuth0RouterContext } from './session-mapper.js'
-import { DEFAULT_AUDIENCE_KEY } from './config.js'
+import { DEFAULT_AUDIENCE_KEY, resolveRoutePaths } from './config.js'
 import { UnauthorizedError, ForbiddenError } from '../errors/index.js'
 import type { Auth0RouterContext } from '../types/index.js'
 
@@ -13,10 +13,6 @@ import type { Auth0RouterContext } from '../types/index.js'
 async function readAuthContext(auth0: Auth0Instance): Promise<Auth0RouterContext> {
   const session = await auth0.client.getSession()
   return toAuth0RouterContext(session, auth0.config.excludedClaims)
-}
-
-function authBasePath(auth0: Auth0Instance): string {
-  return auth0.config.routes?.base ?? '/auth'
 }
 
 /**
@@ -35,7 +31,7 @@ export function auth0FunctionMiddleware(auth0: Auth0Instance) {
  * the login route. Use for server functions that drive navigation.
  */
 export function requireAuthMiddleware(auth0: Auth0Instance) {
-  const loginPath = auth0.config.routes?.login ?? `${authBasePath(auth0)}/login`
+  const loginPath = resolveRoutePaths(auth0.config).login
   return createMiddleware({ type: 'function' }).server(async ({ next }) => {
     const auth0Context = await readAuthContext(auth0)
     if (!auth0Context.isAuthenticated) {
@@ -49,7 +45,7 @@ export function requireAuthMiddleware(auth0: Auth0Instance) {
  * Function middleware that requires the session's organization to match `orgId`.
  */
 export function requireOrgMiddleware(auth0: Auth0Instance, orgId: string) {
-  const loginPath = auth0.config.routes?.login ?? `${authBasePath(auth0)}/login`
+  const loginPath = resolveRoutePaths(auth0.config).login
   return createMiddleware({ type: 'function' }).server(async ({ next }) => {
     const auth0Context = await readAuthContext(auth0)
     if (!auth0Context.isAuthenticated) {
