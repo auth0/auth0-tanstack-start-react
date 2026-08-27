@@ -136,6 +136,33 @@ describe('auth0Handlers GET dispatch', () => {
     })
   })
 
+  it('callback → wraps an Error from the exchange, keeping its message', async () => {
+    const auth0 = mockAuth0({
+      completeInteractiveLogin: vi
+        .fn()
+        .mockRejectedValue(new Error('state mismatch')),
+    })
+    setRequest('/auth/callback?code=abc&state=xyz')
+    await expect(auth0Handlers(auth0).GET()).rejects.toMatchObject({
+      name: 'CallbackError',
+      message: 'state mismatch',
+    })
+  })
+
+  it('callback → wraps a non-Error from the exchange with a default message', async () => {
+    // The foundation should reject with an Error, but guard the odd case where it
+    // throws something else so the callback still surfaces a CallbackError rather
+    // than leaking the raw value.
+    const auth0 = mockAuth0({
+      completeInteractiveLogin: vi.fn().mockRejectedValue('kaboom'),
+    })
+    setRequest('/auth/callback?code=abc&state=xyz')
+    await expect(auth0Handlers(auth0).GET()).rejects.toMatchObject({
+      name: 'CallbackError',
+      message: 'Login callback failed.',
+    })
+  })
+
   it('logout → 302 to Auth0 logout', async () => {
     const auth0 = mockAuth0()
     setRequest('/auth/logout')
