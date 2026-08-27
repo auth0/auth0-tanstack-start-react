@@ -172,6 +172,13 @@ describe('getConfig', () => {
     ).toThrow(/must use http or https/)
   })
 
+  it('rejects an appBaseUrl that carries credentials', () => {
+    // Auth0 rejects a redirect_uri with embedded credentials, so catch it here.
+    expect(() =>
+      getConfig({ ...VALID, appBaseUrl: 'https://user:pass@app.example.com' }),
+    ).toThrow(/must not include a username or password/)
+  })
+
   it('validates every entry of an appBaseUrl allow-list, not just the first', () => {
     expect(() =>
       getConfig({
@@ -567,6 +574,16 @@ describe('resolveAppBaseUrl', () => {
     expect(() =>
       // @ts-expect-error deliberately calling the pre-1.0 signature
       resolveAppBaseUrl(undefined, new Request('https://app.example.com')),
+    ).toThrow(/takes the resolved config object/)
+    // A `domain` resolver (a function) passed as the first argument would also
+    // destructure to `appBaseUrl: undefined` and quietly infer the base URL from
+    // the request, so it must hit the same guard rather than slip through.
+    expect(() =>
+      resolveAppBaseUrl(
+        // @ts-expect-error deliberately passing a domain resolver by mistake
+        () => 'tenant.auth0.com',
+        new Request('https://app.example.com'),
+      ),
     ).toThrow(/takes the resolved config object/)
   })
 })

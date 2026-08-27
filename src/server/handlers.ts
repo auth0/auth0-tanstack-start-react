@@ -122,6 +122,12 @@ function redirectUriFor(auth0: Auth0Instance, appBaseUrl: string): string {
  * Rebuilding the URL from the resolved base URL and the configured callback path
  * makes both sides identical by construction. The query string is copied over
  * untouched, because it carries the `code` and `state` the exchange needs.
+ *
+ * The path comes from the configured callback route, not from the incoming
+ * request. If an external layer rewrites the public path to a different internal
+ * one (for example Nginx mapping `/oidc-callback` to `/auth/callback`), set the
+ * SDK's callback route to the public path so `redirect_uri` matches the value
+ * Auth0 was given at `/authorize`.
  */
 function callbackUrlFor(
   auth0: Auth0Instance,

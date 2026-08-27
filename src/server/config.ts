@@ -153,6 +153,15 @@ function assertValidAppBaseUrl(appBaseUrl: AppBaseUrl): void {
         `appBaseUrl "${entry}" must use http or https.`,
       )
     }
+    // Auth0 rejects a `redirect_uri` that carries credentials, so a base URL
+    // like `https://user:pass@app.example.com` would only fail on the first
+    // login. Reject it here so the typo surfaces at startup instead.
+    if (parsed.username !== '' || parsed.password !== '') {
+      throw new InvalidConfigurationError(
+        `appBaseUrl "${entry}" must not include a username or password. Use a ` +
+          'plain origin, for example "https://app.example.com".',
+      )
+    }
   }
 }
 
@@ -263,6 +272,12 @@ function firstHeaderValue(value: string | null): string | undefined {
  * credentials, or a default port cannot smuggle anything into the origin, and the
  * protocol must be exactly `http` or `https`.
  *
+ * With `trustProxy` disabled the `Host` header is still used, and `Host` is
+ * client-supplied. On a directly reachable deployment a caller can send a `Host`
+ * that matches a different `appBaseUrl` allow-list entry (for example a staging
+ * origin). Auth0's Allowed Callback URLs are the backstop that keeps this from
+ * reaching anywhere the app has not registered.
+ *
  * This is the only place in the SDK that reads a forwarded header.
  */
 export function publicRequestOrigin(
@@ -368,8 +383,16 @@ export function resolveAppBaseUrl(
   // branch and infer the base URL from the request. `null`/`undefined` is caught
   // here too: in Multiple Custom Domains mode the old first argument was
   // `appBaseUrl`, which is `undefined`, so an old call would otherwise crash with
-  // a raw "Cannot destructure" TypeError instead of this actionable message.
-  if (config == null || typeof config === 'string' || Array.isArray(config)) {
+  // a raw "Cannot destructure" TypeError instead of this actionable message. A
+  // `function` (a `domain` resolver passed here by mistake) is rejected for the
+  // same reason: it would destructure to `appBaseUrl: undefined` and quietly
+  // enter that same branch.
+  if (
+    config == null ||
+    typeof config === 'string' ||
+    typeof config === 'function' ||
+    Array.isArray(config)
+  ) {
     throw new InvalidConfigurationError(
       'resolveAppBaseUrl() takes the resolved config object, not the ' +
         '`appBaseUrl` value. Call resolveAppBaseUrl(auth0.config, request).',
