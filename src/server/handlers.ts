@@ -61,6 +61,13 @@ const DENIED_PARAM_KEYS = new Set([
 
 // OAuth/OIDC protocol parameters the SDK controls; never overridable by the
 // caller through query params.
+//
+// The Request-Object params (`request`, `request_uri`, `claims`, `id_token_hint`,
+// `response_mode`) are reserved too: a crafted login link such as
+// `/auth/login?request_uri=https://attacker/obj` would otherwise submit a Request
+// Object to `/authorize` that carries its own authorization parameters, letting a
+// caller smuggle values past this filter. `prompt` and `login_hint` are left
+// forwardable on purpose, since integrators commonly set them.
 const RESERVED_OAUTH_PARAMS = new Set([
   'response_type',
   'state',
@@ -71,6 +78,11 @@ const RESERVED_OAUTH_PARAMS = new Set([
   'nonce',
   'scope',
   'audience',
+  'request',
+  'request_uri',
+  'claims',
+  'id_token_hint',
+  'response_mode',
 ])
 
 /**

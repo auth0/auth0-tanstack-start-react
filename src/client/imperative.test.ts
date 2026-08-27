@@ -42,7 +42,24 @@ describe('login', () => {
 
   it('appends an encoded returnTo', () => {
     const href = catchRedirect(() => login(ctx, { returnTo: '/a b' })).href
-    expect(href).toBe('/auth/login?returnTo=%2Fa%20b')
+    expect(href).toBe('/auth/login?returnTo=%2Fa+b')
+  })
+
+  it('forwards authorizationParams (e.g. acr_values for a step-up)', () => {
+    const href = catchRedirect(() =>
+      login(ctx, { authorizationParams: { acr_values: 'urn:mfa', prompt: 'login' } }),
+    ).href
+    expect(href).toBe('/auth/login?acr_values=urn%3Amfa&prompt=login')
+  })
+
+  it('combines returnTo with authorizationParams', () => {
+    const href = catchRedirect(() =>
+      login(ctx, {
+        returnTo: '/settings',
+        authorizationParams: { screen_hint: 'signup' },
+      }),
+    ).href
+    expect(href).toBe('/auth/login?returnTo=%2Fsettings&screen_hint=signup')
   })
 
   it('honors a custom loginPath', () => {

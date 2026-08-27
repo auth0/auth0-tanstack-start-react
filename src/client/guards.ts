@@ -1,5 +1,6 @@
 import { redirect } from '@tanstack/react-router'
-import type { Auth0RouterContext } from '../types/index.js'
+import type { Auth0RouterContext, AuthorizationParameters } from '../types/index.js'
+import { buildLoginHref } from '../login-url.js'
 
 /**
  * The slice of TanStack Router's `beforeLoad` context the guards read. Kept
@@ -19,6 +20,16 @@ export interface GuardOptions {
   returnTo?: string
   /** Where to send authenticated-but-unauthorized users. Default: `/403`. */
   unauthorizedPath?: string
+  /**
+   * Extra OIDC authorization parameters forwarded to the login route (e.g.
+   * `acr_values` to force a step-up, `prompt`, `login_hint`, `screen_hint`).
+   * The login route's server handler filters and applies them.
+   *
+   * SDK-controlled OAuth params (`scope`, `audience`, `state`, `redirect_uri`,
+   * and similar) are ignored here; the login route drops them. Set `scope` and
+   * `audience` on `auth0Server({ authorizationParams })` instead.
+   */
+  authorizationParams?: AuthorizationParameters
 }
 
 /**
@@ -55,11 +66,11 @@ export function requireAuth(options: GuardOptions = {}) {
   return ({ context }: GuardContext) => {
     if (shouldWaitForAuth(context.auth0)) return
     if (!context.auth0.isAuthenticated) {
-      const returnTo = options.returnTo
       throw redirect({
-        href: returnTo
-          ? `${loginPath}?returnTo=${encodeURIComponent(returnTo)}`
-          : loginPath,
+        href: buildLoginHref(loginPath, {
+          returnTo: options.returnTo,
+          authorizationParams: options.authorizationParams,
+        }),
         // The auth routes are handled at the HTTP middleware layer, not in the
         // router tree. Without this, a client-side navigation makes the router
         // try to match `/auth/login` internally and 404. Forcing a full-document
@@ -84,7 +95,12 @@ export function requireOrg(orgId: string, options: GuardOptions = {}) {
     if (shouldWaitForAuth(context.auth0)) return
     if (!context.auth0.isAuthenticated || context.auth0.user?.org_id !== orgId) {
       throw redirect({
-        href: `${loginPath}?organization=${encodeURIComponent(orgId)}`,
+        // `organization` is set last so the guard's target org wins over any
+        // `organization` a caller happened to pass in authorizationParams.
+        href: buildLoginHref(loginPath, {
+          returnTo: options.returnTo,
+          authorizationParams: { ...options.authorizationParams, organization: orgId },
+        }),
         reloadDocument: true,
       })
     }

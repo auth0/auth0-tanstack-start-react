@@ -4,7 +4,8 @@ import type { Auth0Instance } from './auth0-server.js'
 import { toAuth0RouterContext } from './session-mapper.js'
 import { DEFAULT_AUDIENCE_KEY, resolveRoutePaths } from './config.js'
 import { UnauthorizedError, ForbiddenError } from '../errors/index.js'
-import type { Auth0RouterContext } from '../types/index.js'
+import type { Auth0RouterContext, AuthorizationParameters } from '../types/index.js'
+import { buildLoginHref } from '../login-url.js'
 
 /**
  * Reads the current session from the client and shapes it into the
@@ -26,16 +27,41 @@ export function auth0FunctionMiddleware(auth0: Auth0Instance) {
   })
 }
 
+/** Options for the redirecting route-guard middleware. */
+export interface RequireLoginMiddlewareOptions {
+  /** Where to send the user back to after login. */
+  returnTo?: string
+  /**
+   * Extra OIDC authorization parameters forwarded to the login route (e.g.
+   * `acr_values` to force a step-up, `prompt`, `login_hint`). The login route's
+   * server handler filters and applies them.
+   *
+   * SDK-controlled OAuth params (`scope`, `audience`, `state`, `redirect_uri`,
+   * and similar) are ignored here; the login route drops them. Set `scope` and
+   * `audience` on `auth0Server({ authorizationParams })` instead.
+   */
+  authorizationParams?: AuthorizationParameters
+}
+
 /**
  * Function middleware that blocks unauthenticated requests by redirecting to
  * the login route. Use for server functions that drive navigation.
  */
-export function requireAuthMiddleware(auth0: Auth0Instance) {
+export function requireAuthMiddleware(
+  auth0: Auth0Instance,
+  options: RequireLoginMiddlewareOptions = {},
+) {
   const loginPath = resolveRoutePaths(auth0.config).login
   return createMiddleware({ type: 'function' }).server(async ({ next }) => {
     const auth0Context = await readAuthContext(auth0)
     if (!auth0Context.isAuthenticated) {
-      throw redirect({ href: loginPath, reloadDocument: true })
+      throw redirect({
+        href: buildLoginHref(loginPath, {
+          returnTo: options.returnTo,
+          authorizationParams: options.authorizationParams,
+        }),
+        reloadDocument: true,
+      })
     }
     return next({ context: { auth0: auth0Context } })
   })
@@ -44,15 +70,25 @@ export function requireAuthMiddleware(auth0: Auth0Instance) {
 /**
  * Function middleware that requires the session's organization to match `orgId`.
  */
-export function requireOrgMiddleware(auth0: Auth0Instance, orgId: string) {
+export function requireOrgMiddleware(
+  auth0: Auth0Instance,
+  orgId: string,
+  options: RequireLoginMiddlewareOptions = {},
+) {
   const loginPath = resolveRoutePaths(auth0.config).login
+  // `organization` is set last so the target org wins over any `organization` a
+  // caller passed in authorizationParams.
+  const loginHref = buildLoginHref(loginPath, {
+    returnTo: options.returnTo,
+    authorizationParams: { ...options.authorizationParams, organization: orgId },
+  })
   return createMiddleware({ type: 'function' }).server(async ({ next }) => {
     const auth0Context = await readAuthContext(auth0)
-    if (!auth0Context.isAuthenticated) {
-      throw redirect({ href: `${loginPath}?organization=${orgId}`, reloadDocument: true })
-    }
-    if (auth0Context.user?.org_id !== orgId) {
-      throw redirect({ href: `${loginPath}?organization=${orgId}`, reloadDocument: true })
+    if (
+      !auth0Context.isAuthenticated ||
+      auth0Context.user?.org_id !== orgId
+    ) {
+      throw redirect({ href: loginHref, reloadDocument: true })
     }
     return next({ context: { auth0: auth0Context } })
   })
