@@ -11,7 +11,10 @@ vi.mock('@tanstack/start-server-core', () => ({
 import { auth0Handlers } from './handlers.js'
 import type { Auth0Instance } from './auth0-server.js'
 
-function mockAuth0(over: Partial<Record<string, unknown>> = {}): Auth0Instance {
+function mockAuth0(
+  over: Partial<Record<string, unknown>> = {},
+  config: Partial<Record<string, unknown>> = {},
+): Auth0Instance {
   return {
     client: {
       startInteractiveLogin: vi
@@ -23,7 +26,12 @@ function mockAuth0(over: Partial<Record<string, unknown>> = {}): Auth0Instance {
       handleBackchannelLogout: vi.fn().mockResolvedValue(undefined),
       ...over,
     },
-    config: { appBaseUrl: 'http://localhost:3000', routes: undefined },
+    config: {
+      appBaseUrl: 'http://localhost:3000',
+      routes: undefined,
+      trustProxy: false,
+      ...config,
+    },
   } as unknown as Auth0Instance
 }
 
@@ -34,6 +42,14 @@ function setRequest(path: string, method = 'GET', form?: Record<string, string>)
     init.headers = { 'content-type': 'application/x-www-form-urlencoded' }
   }
   currentRequest = new Request(`http://localhost:3000${path}`, init)
+}
+
+/** The URL the handler handed to the token exchange. */
+function exchangedUrl(auth0: Auth0Instance): string {
+  const complete = auth0.client.completeInteractiveLogin as ReturnType<
+    typeof vi.fn
+  >
+  return (complete.mock.calls[0]![0] as URL).toString()
 }
 
 beforeEach(() => {
@@ -184,11 +200,20 @@ describe('auth0Handlers GET dispatch', () => {
 })
 
 describe('Multiple Custom Domains (resolver mode)', () => {
-  function mockAuth0Mcd(startInteractiveLogin: ReturnType<typeof vi.fn>): Auth0Instance {
+  function mockAuth0Mcd(
+    startInteractiveLogin: ReturnType<typeof vi.fn>,
+    config: Partial<Record<string, unknown>> = {},
+  ): Auth0Instance {
     return {
       client: { startInteractiveLogin },
       // Resolver domain + no appBaseUrl => per-request redirect_uri mode.
-      config: { domain: () => 'brand-a.auth0.com', appBaseUrl: undefined, routes: undefined },
+      config: {
+        domain: () => 'brand-a.auth0.com',
+        appBaseUrl: undefined,
+        routes: undefined,
+        trustProxy: false,
+        ...config,
+      },
     } as unknown as Auth0Instance
   }
 
@@ -198,7 +223,7 @@ describe('Multiple Custom Domains (resolver mode)', () => {
       .mockResolvedValue(new URL('https://brand-a.auth0.com/authorize'))
     const auth0 = mockAuth0Mcd(start)
     currentRequest = new Request('https://brand-a.example.com/auth/login', {
-      headers: { host: 'brand-a.example.com', 'x-forwarded-proto': 'https' },
+      headers: { host: 'brand-a.example.com' },
     })
     const res = await auth0Handlers(auth0).GET()
     expect(res.status).toBe(302)
@@ -208,12 +233,31 @@ describe('Multiple Custom Domains (resolver mode)', () => {
     )
   })
 
-  it('login → uses X-Forwarded-Host to build redirect_uri', async () => {
+  it('login → ignores X-Forwarded-Host until trustProxy is enabled', async () => {
     const start = vi
       .fn()
       .mockResolvedValue(new URL('https://brand-b.auth0.com/authorize'))
     const auth0 = mockAuth0Mcd(start)
     currentRequest = new Request('https://internal.local/auth/login', {
+      headers: {
+        host: 'internal.local',
+        'x-forwarded-host': 'brand-b.example.com',
+        'x-forwarded-proto': 'https',
+      },
+    })
+    await auth0Handlers(auth0).GET()
+    const arg = start.mock.calls[0]![0]
+    expect(arg.authorizationParams.redirect_uri).toBe(
+      'https://internal.local/auth/callback',
+    )
+  })
+
+  it('login → uses X-Forwarded-Host to build redirect_uri when trustProxy is enabled', async () => {
+    const start = vi
+      .fn()
+      .mockResolvedValue(new URL('https://brand-b.auth0.com/authorize'))
+    const auth0 = mockAuth0Mcd(start, { trustProxy: true })
+    currentRequest = new Request('http://internal.local/auth/login', {
       headers: {
         host: 'internal.local',
         'x-forwarded-host': 'brand-b.example.com',
@@ -236,6 +280,197 @@ describe('Multiple Custom Domains (resolver mode)', () => {
       .mock.calls[0]![0]
     // No authorizationParams at all when only the default login is requested.
     expect(arg.authorizationParams).toBeUndefined()
+  })
+})
+
+describe('callback behind a proxy that terminates TLS', () => {
+  // What a reverse proxy or load balancer forwards to the app: plain HTTP to an
+  // internal address, with the browser-facing origin only in the headers. The
+  // token exchange re-sends redirect_uri, and Auth0 rejects the login unless it
+  // matches the value that started it, so the handler must rebuild the callback
+  // URL from appBaseUrl rather than from the request it received.
+  function setProxiedRequest(
+    path: string,
+    forwarded: Record<string, string> = {
+      'x-forwarded-host': 'app.example.com',
+      'x-forwarded-proto': 'https',
+    },
+  ) {
+    currentRequest = new Request(`http://10.0.0.7:3000${path}`, {
+      headers: { host: '10.0.0.7:3000', ...forwarded },
+    })
+  }
+
+  it('exchanges the code against appBaseUrl, not the internal address the app saw', async () => {
+    const auth0 = mockAuth0({}, { appBaseUrl: 'https://app.example.com' })
+    setProxiedRequest('/auth/callback?code=abc&state=xyz')
+    const res = await auth0Handlers(auth0).GET()
+    expect(res.status).toBe(302)
+    expect(exchangedUrl(auth0)).toBe(
+      'https://app.example.com/auth/callback?code=abc&state=xyz',
+    )
+  })
+
+  it('needs no trustProxy for a single configured appBaseUrl', async () => {
+    // The configured value is already the public origin, so no forwarded header
+    // is read and nothing has to be opted into.
+    const auth0 = mockAuth0(
+      {},
+      { appBaseUrl: 'https://app.example.com', trustProxy: false },
+    )
+    setProxiedRequest('/auth/callback?code=abc&state=xyz', {})
+    await auth0Handlers(auth0).GET()
+    expect(exchangedUrl(auth0)).toBe(
+      'https://app.example.com/auth/callback?code=abc&state=xyz',
+    )
+  })
+
+  it('keeps the whole query string, including params Auth0 adds', async () => {
+    const auth0 = mockAuth0({}, { appBaseUrl: 'https://app.example.com' })
+    setProxiedRequest('/auth/callback?code=abc&state=xyz&iss=https%3A%2F%2Ft.auth0.com')
+    await auth0Handlers(auth0).GET()
+    expect(exchangedUrl(auth0)).toBe(
+      'https://app.example.com/auth/callback?code=abc&state=xyz&iss=https%3A%2F%2Ft.auth0.com',
+    )
+  })
+
+  it('uses the configured callback path when routes.base is customised', async () => {
+    // The same path has to reach the redirect_uri sent to /authorize and the one
+    // re-sent during the exchange.
+    const auth0 = mockAuth0(
+      {},
+      {
+        appBaseUrl: 'https://app.example.com',
+        routes: { base: '/authentication' },
+      },
+    )
+    currentRequest = new Request(
+      'http://10.0.0.7:3000/authentication/callback?code=abc&state=xyz',
+      { headers: { host: '10.0.0.7:3000' } },
+    )
+    await auth0Handlers(auth0).GET()
+    expect(exchangedUrl(auth0)).toBe(
+      'https://app.example.com/authentication/callback?code=abc&state=xyz',
+    )
+  })
+
+  it('uses an individually overridden callback path', async () => {
+    const auth0 = mockAuth0(
+      {},
+      {
+        appBaseUrl: 'https://app.example.com',
+        routes: { callback: '/auth/oidc-callback' },
+      },
+    )
+    currentRequest = new Request(
+      'http://10.0.0.7:3000/auth/oidc-callback?code=abc&state=xyz',
+      { headers: { host: '10.0.0.7:3000' } },
+    )
+    await auth0Handlers(auth0).GET()
+    expect(exchangedUrl(auth0)).toBe(
+      'https://app.example.com/auth/oidc-callback?code=abc&state=xyz',
+    )
+  })
+
+  it('redirects to returnTo on the public origin, not the internal one', async () => {
+    const auth0 = mockAuth0(
+      {
+        completeInteractiveLogin: vi
+          .fn()
+          .mockResolvedValue({ appState: { returnTo: '/dashboard' } }),
+      },
+      { appBaseUrl: 'https://app.example.com' },
+    )
+    setProxiedRequest('/auth/callback?code=abc&state=xyz')
+    const res = await auth0Handlers(auth0).GET()
+    expect(res.headers.get('Location')).toBe('https://app.example.com/dashboard')
+  })
+
+  it('picks the matching allow-list entry once the proxy is trusted', async () => {
+    const auth0 = mockAuth0(
+      {},
+      {
+        appBaseUrl: ['https://app.example.com', 'https://preview.example.com'],
+        trustProxy: true,
+      },
+    )
+    setProxiedRequest('/auth/callback?code=abc&state=xyz', {
+      'x-forwarded-host': 'preview.example.com',
+      'x-forwarded-proto': 'https',
+    })
+    await auth0Handlers(auth0).GET()
+    expect(exchangedUrl(auth0)).toBe(
+      'https://preview.example.com/auth/callback?code=abc&state=xyz',
+    )
+  })
+
+  it('fails with an actionable error when an allow-list is used without trustProxy', async () => {
+    const auth0 = mockAuth0({}, { appBaseUrl: ['https://app.example.com'] })
+    setProxiedRequest('/auth/callback?code=abc&state=xyz')
+    await expect(auth0Handlers(auth0).GET()).rejects.toThrow(/trustProxy/)
+  })
+
+  it('builds the callback URL from the forwarded host in resolver mode', async () => {
+    const auth0 = mockAuth0(
+      {},
+      {
+        domain: () => 'brand-a.auth0.com',
+        appBaseUrl: undefined,
+        trustProxy: true,
+      },
+    )
+    setProxiedRequest('/auth/callback?code=abc&state=xyz', {
+      'x-forwarded-host': 'brand-a.example.com',
+      'x-forwarded-proto': 'https',
+    })
+    await auth0Handlers(auth0).GET()
+    expect(exchangedUrl(auth0)).toBe(
+      'https://brand-a.example.com/auth/callback?code=abc&state=xyz',
+    )
+  })
+
+  it('leaves a direct request unchanged, so local development is unaffected', async () => {
+    const auth0 = mockAuth0()
+    setRequest('/auth/callback?code=abc&state=xyz')
+    await auth0Handlers(auth0).GET()
+    expect(exchangedUrl(auth0)).toBe(
+      'http://localhost:3000/auth/callback?code=abc&state=xyz',
+    )
+  })
+
+  it('reports an Auth0 error before rebuilding anything', async () => {
+    const auth0 = mockAuth0({}, { appBaseUrl: ['https://app.example.com'] })
+    setProxiedRequest('/auth/callback?error=access_denied')
+    await expect(auth0Handlers(auth0).GET()).rejects.toMatchObject({
+      name: 'CallbackError',
+      message: 'access_denied',
+    })
+  })
+
+  it('sends logout back to the public origin, which Auth0 has to have on file', async () => {
+    // The post-logout returnTo has to be a registered Allowed Logout URL, so the
+    // internal address the app saw would be rejected.
+    const auth0 = mockAuth0(
+      {},
+      { appBaseUrl: ['https://app.example.com'], trustProxy: true },
+    )
+    setProxiedRequest('/auth/logout')
+    await auth0Handlers(auth0).GET()
+    expect(auth0.client.logout).toHaveBeenCalledWith({
+      returnTo: 'https://app.example.com',
+    })
+  })
+
+  it('keeps a same-origin logout returnTo relative to the public origin', async () => {
+    const auth0 = mockAuth0(
+      {},
+      { appBaseUrl: ['https://app.example.com'], trustProxy: true },
+    )
+    setProxiedRequest('/auth/logout?returnTo=/goodbye')
+    await auth0Handlers(auth0).GET()
+    expect(auth0.client.logout).toHaveBeenCalledWith({
+      returnTo: 'https://app.example.com/goodbye',
+    })
   })
 })
 

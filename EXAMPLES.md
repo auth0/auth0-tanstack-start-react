@@ -36,11 +36,12 @@ A complete, runnable version of the setup basics lives in
 
 **Configuration and tooling**
 
-18. [Session configuration](#18-session-configuration)
-19. [Stateful session store](#19-stateful-session-store)
-20. [Controlling which claims reach the browser](#20-controlling-which-claims-reach-the-browser)
-21. [Error handling](#21-error-handling)
-22. [Testing](#22-testing)
+18. [Running behind a reverse proxy](#18-running-behind-a-reverse-proxy)
+19. [Session configuration](#19-session-configuration)
+20. [Stateful session store](#20-stateful-session-store)
+21. [Controlling which claims reach the browser](#21-controlling-which-claims-reach-the-browser)
+22. [Error handling](#22-error-handling)
+23. [Testing](#23-testing)
 
 ---
 
@@ -60,6 +61,10 @@ APP_BASE_URL=http://localhost:3000
 `AUTH0_SECRET` encrypts the session cookie and must be at least 32 bytes. The command above
 generates a suitable value.
 
+One more variable is optional. `AUTH0_TRUST_PROXY=true` lets the SDK read the `X-Forwarded-Host` and
+`X-Forwarded-Proto` headers when working out the public URL of a request. It defaults to off, and only
+some setups need it. See [Running behind a reverse proxy](#18-running-behind-a-reverse-proxy).
+
 In the application settings in the Dashboard:
 
 - **Allowed Callback URLs**: `http://localhost:3000/auth/callback`
@@ -77,14 +82,26 @@ import { auth0Server } from '@auth0/auth0-tanstack-start-react/server'
 export const auth0 = auth0Server()
 ```
 
+`appBaseUrl` is the public URL of your app, the one the browser uses. It is not the address your
+server listens on, so keep it as the public `https://` URL even when the app runs behind a reverse
+proxy, a load balancer, or a tunnel. The SDK builds the `redirect_uri` for the login from this value
+and reads no request headers to do it, which is why a single static `appBaseUrl` needs no extra
+configuration. See [Running behind a reverse proxy](#18-running-behind-a-reverse-proxy) if you
+need one of the other forms.
+
 For staging and preview deployments, `appBaseUrl` also accepts a list of allowed origins. The
-incoming request origin must match one entry in the list.
+incoming request origin must match one entry in the list, and the entry that matched is used for
+that request.
 
 ```ts
 export const auth0 = auth0Server({
   appBaseUrl: ['https://app.example.com', 'https://staging.example.com'],
 })
 ```
+
+Behind a proxy that terminates TLS, this form also needs `trustProxy: true`, because the origin is
+taken from the request rather than from configuration. See
+[Running behind a reverse proxy](#18-running-behind-a-reverse-proxy).
 
 ## 3. Register the middleware
 
@@ -532,7 +549,7 @@ const url = await connectAccount(auth0, {
 
 // In the dedicated callback route, complete the link and redirect.
 const request = getRequest()
-const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
+const appBaseUrl = resolveAppBaseUrl(auth0.config, request)
 const { appState } = await completeConnectAccount(auth0, new URL(request.url))
 // Validate returnTo before using it as a redirect target. connectAccount
 // already drops off-origin values when storing it; this second check keeps a
@@ -540,6 +557,13 @@ const { appState } = await completeConnectAccount(auth0, new URL(request.url))
 const returnTo = toSafeRedirect(appState?.returnTo ?? '/', appBaseUrl) ?? appBaseUrl
 return new Response(null, { status: 302, headers: { Location: returnTo } })
 ```
+
+> **Behind a reverse proxy.** With a single static `appBaseUrl`, the link and
+> unlink callbacks work behind a proxy that terminates TLS with no extra setup.
+> If you use an `appBaseUrl` allow-list or Multiple Custom Domains, the completion
+> callbacks work out the origin per request, so they also need `trustProxy: true`
+> (or `AUTH0_TRUST_PROXY=true`). See
+> [Running behind a reverse proxy](#18-running-behind-a-reverse-proxy).
 
 > **Open-redirect safety.** `returnTo` usually comes from a query parameter, so
 > it is attacker-influenceable. `connectAccount` validates it against your app's
@@ -661,8 +685,14 @@ domain, keep passing a plain string and skip this section.
 ### Configure a domain resolver
 
 Instead of a fixed `domain` string, pass a function. It receives the incoming request and returns the
-Auth0 custom domain to use. When you use a resolver, `appBaseUrl` becomes optional: the SDK infers it
-per request from the `X-Forwarded-Host` (or `Host`) and `X-Forwarded-Proto` headers.
+Auth0 custom domain to use. When you use a resolver, `appBaseUrl` becomes optional: the SDK works it
+out per request from the host of the incoming request.
+
+This mode almost always runs behind a reverse proxy, so set `trustProxy: true` (or
+`AUTH0_TRUST_PROXY=true`) as well. Without it the SDK uses the `Host` header and the protocol of the
+request it received, which behind a proxy that terminates TLS is the internal address rather than the
+branded public one, and the login cannot complete. Read
+[Running behind a reverse proxy](#18-running-behind-a-reverse-proxy) before you enable it.
 
 ```ts
 // src/auth.server.ts
@@ -684,8 +714,11 @@ export const auth0 = auth0Server({
     }
     return domain
   },
+  // Required behind a proxy that terminates TLS, so the SDK builds the
+  // redirect_uri from the public host instead of the internal one.
+  trustProxy: true,
   // clientId / clientSecret / secret still come from options or the environment.
-  // appBaseUrl is optional here; it is inferred from the request host.
+  // appBaseUrl is optional here; it is worked out from the request host.
 })
 ```
 
@@ -718,19 +751,147 @@ rejects any `redirect_uri` that is not on this list, so this is also a safety ne
 
 > [!CAUTION]
 > ### Security: host headers and the trusted proxy requirement
-> In MCD mode the SDK trusts the request `Host` and `X-Forwarded-Host` / `X-Forwarded-Proto` headers to infer the app base URL. It does not validate them, so **you must deploy behind a trusted reverse proxy or edge** (for example Cloudflare, Nginx, or AWS ALB) that:
+> In MCD mode there is no configured `appBaseUrl`, so the app base URL comes from the request host. The SDK cannot validate that host, so **you must deploy behind a trusted reverse proxy or edge** (for example Cloudflare, Nginx, or AWS ALB) that:
 >
 > - sets `X-Forwarded-Host` and `X-Forwarded-Proto` from the real request, and
 > - strips or overwrites any client-supplied values so they cannot be spoofed.
 >
-> Without that, an attacker could send a forged `X-Forwarded-Host` and influence the inferred base URL.
+> With `trustProxy: true` and no such proxy in front of the app, an attacker could send a forged `X-Forwarded-Host` and influence the base URL that is worked out. This is why `trustProxy` is off unless you turn it on, and why you should only turn it on once the proxy above is in place.
 >
 > Two things keep this safe when the proxy is configured correctly:
 >
 > - **Map from a trusted set.** Resolve the domain from a fixed table of known custom domains, as above. Never derive the Auth0 domain directly from untrusted request input.
-> - **Auth0's Allowed Callback URLs are the backstop.** The inferred host becomes the `redirect_uri` sent to Auth0. Auth0 rejects any `redirect_uri` that is not a registered Allowed Callback URL, so a spoofed host cannot complete a login even if it reached the resolver.
+> - **Auth0's Allowed Callback URLs are the backstop.** That host becomes the `redirect_uri` sent to Auth0. Auth0 rejects any `redirect_uri` that is not a registered Allowed Callback URL, so a spoofed host cannot complete a login even if it reached the resolver.
 
-## 18. Session configuration
+## 18. Running behind a reverse proxy
+
+Most production deployments put something in front of the app: an ingress controller, a load
+balancer, Nginx, Cloudflare, or a tunnel used during development. That front end usually terminates
+TLS and forwards a plain `http://` request to your server, often on an internal address such as
+`10.0.0.7:3000`. The browser used `https://app.example.com`, but your server sees something else.
+
+This matters for login because Auth0 requires the `redirect_uri` sent during the code exchange to be
+identical to the one that started the login. If one of them is built from the public URL and the
+other from what the server happened to receive, Auth0 rejects the exchange and the user sees an error
+saying the redirect URI is wrong.
+
+### The common case needs no configuration
+
+With a single static `appBaseUrl` there is nothing to set up. The SDK builds the `redirect_uri` it
+sends to Auth0, and the callback URL it uses for the code exchange, from `appBaseUrl` plus the
+configured route paths. It reads no request headers to do it, so both values are the public URL by
+construction.
+
+```ts
+export const auth0 = auth0Server({
+  appBaseUrl: 'https://app.example.com', // or APP_BASE_URL in the environment
+})
+```
+
+Keep this as the public URL the browser uses. Do not set it to the address your server listens on.
+
+### When the SDK needs the forwarded headers
+
+Two configurations work out the app base URL per request instead of reading it from a fixed string,
+because the right value depends on the host the user arrived on:
+
+- an **`appBaseUrl` allow-list**, used for staging and preview deployments
+- a **`domain` resolver**, used for [Multiple Custom Domains](#17-multiple-custom-domains-mcd), where
+  `appBaseUrl` can be left out entirely
+
+In both cases the SDK has to learn the public origin from the request itself. Behind a proxy that
+terminates TLS, that information only survives in the `X-Forwarded-Host` and `X-Forwarded-Proto`
+headers. Those headers are set by whoever sent the request, so the SDK ignores them unless you tell
+it they can be trusted.
+
+### Enable trustProxy
+
+Set `trustProxy: true` on the instance:
+
+```ts
+export const auth0 = auth0Server({
+  appBaseUrl: ['https://app.example.com', 'https://staging.example.com'],
+  trustProxy: true,
+})
+```
+
+Or set it in the environment, which is easier when the same code runs proxied in production and
+directly in development:
+
+```sh
+AUTH0_TRUST_PROXY=true
+```
+
+The option wins over the environment variable when both are given. `1`, `yes`, and `on` also mean
+true, and `false`, `0`, `no`, and `off` mean false. Any other value is a configuration error, so a
+typo fails at startup instead of quietly leaving the setting off.
+
+Once enabled, the SDK works out the origin like this:
+
+1. Host: `X-Forwarded-Host`, or the `Host` header if that is absent.
+2. Protocol: `X-Forwarded-Proto`, or the protocol of the request the server received.
+
+When a header carries a list, because several proxies each appended to it, the left-most value is
+used. That is the entry closest to the browser, so it is the one that describes the public request.
+
+This setting applies to every flow that works out the base URL per request: login, the login
+callback, logout, organization switching, and the account linking and unlinking callbacks.
+
+> [!IMPORTANT]
+> The `/auth/*` endpoints are served by `auth0Middleware()`, and it reads its own configuration rather
+> than borrowing your `auth0Server()` instance (see
+> [Register the middleware](#3-register-the-middleware)). Any option that affects those endpoints,
+> `trustProxy` included, has to reach it. The environment variable is the simplest way to do that,
+> because both read it. If you would rather pass the option, pass it in both places:
+> `auth0Server({ trustProxy: true })` and `auth0Middleware({ trustProxy: true })`.
+
+> [!CAUTION]
+> ### Only enable trustProxy behind a proxy you control
+> Anyone can put `X-Forwarded-Host` and `X-Forwarded-Proto` on a request. They are only worth
+> trusting when a proxy in front of your app overwrites them on every request, so a client-supplied
+> value can never reach your server. If your server can be reached directly, leave `trustProxy` off.
+> That is why it defaults to `false`.
+>
+> Two things limit the impact even if a forged header does get through. With an allow-list, an origin
+> that is not on the list is rejected before anything is sent to Auth0. And Auth0 refuses any
+> `redirect_uri` that is not a registered Allowed Callback URL, so a login cannot complete on an
+> origin you never registered.
+
+### What it looks like when it is missing
+
+An app that uses an allow-list, runs behind a proxy, and has `trustProxy` off throws an
+`InvalidConfigurationError` at the start of the login, naming the origin it saw and what to do about
+it:
+
+```text
+Request origin "http://10.0.0.7:3000" is not in the appBaseUrl allow-list
+(https://app.example.com, https://staging.example.com). If this app runs behind a reverse
+proxy or load balancer that terminates TLS, set `trustProxy: true` (or
+AUTH0_TRUST_PROXY=true) so the X-Forwarded-Host and X-Forwarded-Proto headers are used.
+```
+
+In domain resolver mode there is no list to check against, so a missing `trustProxy` cannot be
+detected per request. Instead the SDK warns once, when the instance is created:
+
+```text
+[auth0] A `domain` resolver is configured (Multiple Custom Domains), so the app base URL is
+derived from each request. `trustProxy` is disabled, so the X-Forwarded-Host and
+X-Forwarded-Proto headers are ignored. If this app runs behind a reverse proxy or load
+balancer, set `trustProxy: true` (or AUTH0_TRUST_PROXY=true). Pass `trustProxy: false`
+explicitly to silence this warning.
+```
+
+Passing `trustProxy` explicitly, either `true` or `false`, silences it.
+
+### Checklist for the proxy
+
+- Send `X-Forwarded-Host` with the host the browser used.
+- Send `X-Forwarded-Proto` as `https`.
+- Overwrite these headers rather than appending to whatever the client sent.
+- In the Auth0 Dashboard, register every public origin's callback path under **Allowed Callback
+  URLs**, and every public origin under **Allowed Logout URLs**.
+
+## 19. Session configuration
 
 Pass `sessionConfiguration` to `auth0Server()` to control the session cookie and its lifetime. This
 is the session configuration type from `@auth0/auth0-server-js`, so any value you set takes effect.
@@ -763,7 +924,7 @@ of `3 days`, an `inactivityDuration` of `1 day`, and `rolling` set to `true`. Th
 the cookie's `maxAge` and the encrypted session's expiry, so a session cookie is never kept around
 without an end date. Set the fields above to change them.
 
-## 19. Stateful session store
+## 20. Stateful session store
 
 By default the session is stateless: the whole encrypted session lives in the cookie. To store the
 session body on the server instead and keep only a session identifier in the cookie, pass a
@@ -814,7 +975,7 @@ control, so treat it the same way you would treat any store of sensitive data.
 > `/auth/backchannel-logout` endpoint cannot end the session and responds with a `501` configuration
 > error. To use back-channel logout, configure a `sessionStore` as shown above.
 
-## 20. Controlling which claims reach the browser
+## 21. Controlling which claims reach the browser
 
 The user object from the session is dehydrated into the server-rendered HTML so that
 `context.auth0.user` and `useUser()` are populated on first paint. Tokens are never included, but the
@@ -838,7 +999,7 @@ The claims are removed only from the client-facing router context. Server-side r
 `getSession(auth0)` still return the full user object, so a server function or loader can read a
 claim you excluded from the HTML. Pass an empty array (`excludedClaims: []`) to keep every claim.
 
-## 21. Error handling
+## 22. Error handling
 
 The SDK throws typed error classes from the `/errors` entry point. Every SDK error extends the
 built-in `Error` and carries a stable `code`, so you can branch on the class or the code.
@@ -876,7 +1037,7 @@ so you can check them with `instanceof`: `MfaChallengeError`, `MfaEnrollmentErro
 `MfaListAuthenticatorsError`, `MfaVerifyError`, `StartLinkUserError`, `PasskeyChallengeError`,
 `PasskeyGetTokenError`, and `PasskeyRegisterError`, plus the `isMfaRequiredError` helper.
 
-## 22. Testing
+## 23. Testing
 
 The `/testing` entry point provides utilities for component tests, router-guard tests, and SSR
 integration tests.

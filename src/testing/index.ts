@@ -162,6 +162,7 @@ export function createMockAuth0Client(config: MockAuth0ClientConfig = {}) {
       clientSecret: 'mock-secret',
       secret: 'x'.repeat(32),
       appBaseUrl: 'http://localhost:3000',
+      trustProxy: false,
       routes: undefined,
     },
   }

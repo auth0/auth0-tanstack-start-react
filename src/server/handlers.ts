@@ -4,6 +4,7 @@ import { getRequest, getResponseHeaders } from '@tanstack/start-server-core'
 import type { Auth0Instance } from './auth0-server.js'
 import {
   resolveAppBaseUrl,
+  resolveRoutePaths,
   toSafeRedirect,
   usesPerRequestRedirectUri,
 } from './config.js'
@@ -97,28 +98,42 @@ function authorizationParamsFromQuery(
 }
 
 /**
- * The auth endpoint paths this SDK serves, relative to the configured base.
- */
-function resolvePaths(auth0: Auth0Instance) {
-  const base = auth0.config.routes?.base ?? '/auth'
-  return {
-    login: auth0.config.routes?.login ?? `${base}/login`,
-    callback: auth0.config.routes?.callback ?? `${base}/callback`,
-    logout: auth0.config.routes?.logout ?? `${base}/logout`,
-    profile: auth0.config.routes?.profile ?? `${base}/profile`,
-    backchannelLogout:
-      auth0.config.routes?.backchannelLogout ?? `${base}/backchannel-logout`,
-  }
-}
-
-/**
  * Builds the callback `redirect_uri` for a resolved app base URL. Passed
  * explicitly on every interactive flow so login works when the client has no
  * baked-in `redirect_uri`: Multiple Custom Domains mode (a domain resolver) and
  * the `appBaseUrl` allow-list both resolve the base URL per request.
  */
 function redirectUriFor(auth0: Auth0Instance, appBaseUrl: string): string {
-  return new URL(resolvePaths(auth0).callback, appBaseUrl).toString()
+  return new URL(resolveRoutePaths(auth0.config).callback, appBaseUrl).toString()
+}
+
+/**
+ * Builds the URL handed to the token exchange, from the app's own base URL plus
+ * the query string Auth0 sent back.
+ *
+ * The exchange re-sends `redirect_uri`, and Auth0 requires it to match the value
+ * that started the login exactly. The underlying client derives that value from
+ * the URL passed here, so handing it the raw request URL breaks the login behind
+ * a reverse proxy that terminates TLS: the app receives `http://` and often an
+ * internal hostname, while `/authorize` was given the public `https://` URL built
+ * from `appBaseUrl`. Auth0 then rejects the exchange with a message about the
+ * redirect URI being wrong.
+ *
+ * Rebuilding the URL from the resolved base URL and the configured callback path
+ * makes both sides identical by construction. The query string is copied over
+ * untouched, because it carries the `code` and `state` the exchange needs.
+ */
+function callbackUrlFor(
+  auth0: Auth0Instance,
+  appBaseUrl: string,
+  incoming: URL,
+): URL {
+  const callbackUrl = new URL(
+    resolveRoutePaths(auth0.config).callback,
+    appBaseUrl,
+  )
+  callbackUrl.search = incoming.search
+  return callbackUrl
 }
 
 /**
@@ -129,7 +144,7 @@ function redirectUriFor(auth0: Auth0Instance, appBaseUrl: string): string {
 export async function handleLogin(auth0: Auth0Instance): Promise<Response> {
   const request = getRequest()
   const url = new URL(request.url)
-  const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
+  const appBaseUrl = resolveAppBaseUrl(auth0.config, request)
 
   const rawReturnTo = url.searchParams.get('returnTo') ?? '/'
   const returnTo = toSafeRedirect(rawReturnTo, appBaseUrl) ?? appBaseUrl
@@ -163,7 +178,6 @@ export async function handleLogin(auth0: Auth0Instance): Promise<Response> {
 export async function handleCallback(auth0: Auth0Instance): Promise<Response> {
   const request = getRequest()
   const url = new URL(request.url)
-  const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
 
   // Auth0 signals a failed authorization by redirecting back with `error` /
   // `error_description` query params (e.g. an invalid `organization`, a rejected
@@ -171,6 +185,9 @@ export async function handleCallback(auth0: Auth0Instance): Promise<Response> {
   // `completeInteractiveLogin` throws a bare `HTTPError` for these, which the
   // framework surfaces as an unhandled 500. Detect the error response up front
   // and raise a `CallbackError` so it flows through the SDK's error handling.
+  //
+  // This runs before the app base URL is resolved, so that a configuration
+  // problem (an unmatched allow-list, say) cannot mask what Auth0 actually said.
   const authError = url.searchParams.get('error')
   if (authError) {
     throw new CallbackError(
@@ -178,9 +195,11 @@ export async function handleCallback(auth0: Auth0Instance): Promise<Response> {
     )
   }
 
+  const appBaseUrl = resolveAppBaseUrl(auth0.config, request)
+
   try {
     const { appState } = await auth0.client.completeInteractiveLogin<AppState>(
-      url,
+      callbackUrlFor(auth0, appBaseUrl, url),
     )
     const returnTo =
       (appState?.returnTo && toSafeRedirect(appState.returnTo, appBaseUrl)) ||
@@ -204,7 +223,7 @@ export async function handleCallback(auth0: Auth0Instance): Promise<Response> {
 export async function handleLogout(auth0: Auth0Instance): Promise<Response> {
   const request = getRequest()
   const url = new URL(request.url)
-  const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
+  const appBaseUrl = resolveAppBaseUrl(auth0.config, request)
 
   const rawReturnTo = url.searchParams.get('returnTo')
   const returnTo = rawReturnTo
@@ -284,7 +303,7 @@ export function auth0Handlers(auth0: Auth0Instance): {
   GET: () => Promise<Response>
   POST: () => Promise<Response>
 } {
-  const paths = resolvePaths(auth0)
+  const paths = resolveRoutePaths(auth0.config)
 
   return {
     GET: async () => {

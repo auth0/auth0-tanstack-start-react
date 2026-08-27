@@ -85,7 +85,7 @@ export async function switchOrg(
   assertNonEmpty(options.organization, 'organization')
   const { request, redirectUri } = resolvePerRequestRedirect(auth0)
   return auth0.client.startInteractiveLogin({
-    appState: toSafeAppState(auth0.config.appBaseUrl, options.returnTo, request),
+    appState: toSafeAppState(auth0.config, options.returnTo, request),
     authorizationParams: perRequestAuthorizationParams(
       { ...options.authorizationParams, organization: options.organization },
       redirectUri,
@@ -132,7 +132,7 @@ export async function acceptOrgInvitation(
   assertNonEmpty(options.invitation, 'invitation')
   const { request, redirectUri } = resolvePerRequestRedirect(auth0)
   return auth0.client.startInteractiveLogin({
-    appState: toSafeAppState(auth0.config.appBaseUrl, options.returnTo, request),
+    appState: toSafeAppState(auth0.config, options.returnTo, request),
     authorizationParams: perRequestAuthorizationParams(
       {
         ...options.authorizationParams,

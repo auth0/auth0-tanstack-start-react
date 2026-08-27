@@ -1,6 +1,10 @@
 import { getRequest } from '@tanstack/start-server-core'
 import type { Auth0Instance } from './auth0-server.js'
-import { resolveAppBaseUrl, usesPerRequestRedirectUri } from './config.js'
+import {
+  resolveAppBaseUrl,
+  resolveRoutePaths,
+  usesPerRequestRedirectUri,
+} from './config.js'
 
 /**
  * Per-request redirect context for the interactive flows started outside the
@@ -31,12 +35,36 @@ export function resolvePerRequestRedirect(auth0: Auth0Instance): PerRequestRedir
     return { request: undefined, redirectUri: undefined }
   }
   const request = getRequest()
-  const appBaseUrl = resolveAppBaseUrl(auth0.config.appBaseUrl, request)
-  const callbackPath = auth0.config.routes?.callback ?? '/auth/callback'
+  const appBaseUrl = resolveAppBaseUrl(auth0.config, request)
+  const callbackPath = resolveRoutePaths(auth0.config).callback
   return {
     request,
     redirectUri: new URL(callbackPath, appBaseUrl).toString(),
   }
+}
+
+/**
+ * Rebuilds a callback URL so that its origin is the app's own public base URL,
+ * keeping the path and query string the browser actually requested.
+ *
+ * The account-linking and unlinking callbacks exchange an authorization code, and
+ * that exchange re-sends `redirect_uri` derived from the URL passed in. Behind a
+ * reverse proxy that terminates TLS, `new URL(request.url)` carries the internal
+ * scheme and host, which no longer matches the `redirect_uri` that started the
+ * flow, and Auth0 rejects the exchange. Replacing just the origin fixes that
+ * without assuming anything about where the app mounted its callback route.
+ */
+export function normalizeCallbackUrl(auth0: Auth0Instance, url: URL): URL {
+  // In per-request mode (allow-list or Multiple Custom Domains) the base URL is
+  // read from the ambient request via `getRequest()`, not from `url`. Only the
+  // path and query of `url` are kept; its origin is replaced. Tests that reach
+  // this branch therefore have to provide an ambient request.
+  const appBaseUrl = usesPerRequestRedirectUri(auth0.config)
+    ? resolveAppBaseUrl(auth0.config, getRequest())
+    : resolveAppBaseUrl(auth0.config)
+  const normalized = new URL(url.pathname, appBaseUrl)
+  normalized.search = url.search
+  return normalized
 }
 
 /**

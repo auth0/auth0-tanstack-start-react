@@ -3,6 +3,7 @@ import type {
   Auth0ServerOptions,
   AppBaseUrl,
   DomainResolver,
+  RoutesConfig,
   SessionCookieOptions,
 } from '../types/index.js'
 
@@ -47,6 +48,29 @@ function warnOnInsecureCookie(cookie: SessionCookieOptions | undefined): void {
 }
 
 /**
+ * Warns when a {@link DomainResolver} is configured but the forwarded headers are
+ * not trusted. In that mode the app has no configured base URL, so every request
+ * URL is derived from the request host. Behind a TLS-terminating proxy the app
+ * sees `http` and an internal hostname, which produces a `redirect_uri` Auth0
+ * rejects. Only warns when `trustProxy` was left at its default, so a developer
+ * who deliberately turns it off is not nagged.
+ */
+function warnOnUntrustedProxyWithResolver(
+  usesDomainResolver: boolean,
+  trustProxyWasSetExplicitly: boolean,
+): void {
+  if (!usesDomainResolver || trustProxyWasSetExplicitly) return
+  console.warn(
+    '[auth0] A `domain` resolver is configured (Multiple Custom Domains), so ' +
+      'the app base URL is derived from each request. `trustProxy` is disabled, ' +
+      'so the X-Forwarded-Host and X-Forwarded-Proto headers are ignored. If ' +
+      'this app runs behind a reverse proxy or load balancer, set ' +
+      '`trustProxy: true` (or AUTH0_TRUST_PROXY=true). Pass `trustProxy: false` ' +
+      'explicitly to silence this warning.',
+  )
+}
+
+/**
  * Resolved, validated configuration used to construct the server client.
  * Every field here is guaranteed present (unlike the user-facing
  * {@link Auth0ServerOptions}, where everything is optional).
@@ -61,8 +85,21 @@ export interface ResolvedConfig extends Auth0ServerOptions {
    * inferred per request. Use {@link resolveAppBaseUrl} to get a concrete URL.
    */
   appBaseUrl: AppBaseUrl | undefined
+  /** Whether `X-Forwarded-Host` / `X-Forwarded-Proto` are trusted. */
+  trustProxy: boolean
   /** Claims stripped from the user object before it reaches the client HTML. */
   excludedClaims: string[]
+}
+
+/**
+ * The subset of the resolved config needed to turn a request into a concrete app
+ * base URL. Accepting this shape (rather than the whole {@link ResolvedConfig})
+ * keeps {@link resolveAppBaseUrl} and {@link toSafeAppState} easy to call from
+ * tests, while still guaranteeing that `trustProxy` travels with `appBaseUrl`.
+ */
+export interface AppBaseUrlConfig {
+  appBaseUrl: AppBaseUrl | undefined
+  trustProxy?: boolean
 }
 
 function envFirst(...keys: string[]): string | undefined {
@@ -73,13 +110,60 @@ function envFirst(...keys: string[]): string | undefined {
   return undefined
 }
 
+const TRUTHY_ENV_VALUES = new Set(['true', '1', 'yes', 'on'])
+const FALSY_ENV_VALUES = new Set(['false', '0', 'no', 'off'])
+
+/**
+ * Reads a boolean environment variable, returning `undefined` when it is unset so
+ * the caller can fall back to its own default.
+ *
+ * An unrecognised value throws rather than being ignored: silently treating
+ * `AUTH0_TRUST_PROXY=TRUE_PLEASE` as "off" would leave a proxied app broken with
+ * nothing to point at.
+ */
+function envBool(key: string): boolean | undefined {
+  const raw = process.env[key]
+  if (raw === undefined || raw === '') return undefined
+  const value = raw.trim().toLowerCase()
+  if (TRUTHY_ENV_VALUES.has(value)) return true
+  if (FALSY_ENV_VALUES.has(value)) return false
+  throw new InvalidConfigurationError(
+    `${key} must be one of true, false, 1, 0, yes, no, on, off. Received "${raw}".`,
+  )
+}
+
+/**
+ * Validates every configured app base URL, so a typo surfaces at startup with a
+ * clear message instead of as an "Invalid URL" TypeError on the first login.
+ */
+function assertValidAppBaseUrl(appBaseUrl: AppBaseUrl): void {
+  const entries = Array.isArray(appBaseUrl) ? appBaseUrl : [appBaseUrl]
+  for (const entry of entries) {
+    let parsed: URL
+    try {
+      parsed = new URL(entry)
+    } catch {
+      throw new InvalidConfigurationError(
+        `appBaseUrl "${entry}" is not an absolute URL. Use a full origin, ` +
+          'for example "https://app.example.com".',
+      )
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new InvalidConfigurationError(
+        `appBaseUrl "${entry}" must use http or https.`,
+      )
+    }
+  }
+}
+
 /**
  * Merges explicit options with environment variables (explicit wins), then
  * validates that the required fields are present. Throws
  * {@link InvalidConfigurationError} with an actionable message if not.
  *
  * Recognised env vars: `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`,
- * `AUTH0_CLIENT_SECRET`, `AUTH0_SECRET`, `APP_BASE_URL`, `AUTH0_AUDIENCE`.
+ * `AUTH0_CLIENT_SECRET`, `AUTH0_SECRET`, `APP_BASE_URL`, `AUTH0_AUDIENCE`,
+ * `AUTH0_TRUST_PROXY`.
  */
 export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
   const domain = options.domain ?? envFirst('AUTH0_DOMAIN')
@@ -88,6 +172,10 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
   const secret = options.secret ?? envFirst('AUTH0_SECRET')
   const appBaseUrl = options.appBaseUrl ?? envFirst('APP_BASE_URL')
   const audience = options.audience ?? envFirst('AUTH0_AUDIENCE')
+  // Off unless the developer opts in. Forwarded headers are client-supplied
+  // unless a proxy overwrites them, so trusting them cannot be the default.
+  const configuredTrustProxy = options.trustProxy ?? envBool('AUTH0_TRUST_PROXY')
+  const trustProxy = configuredTrustProxy ?? false
 
   // A function `domain` is a per-request resolver (Multiple Custom Domains). In
   // that mode `appBaseUrl` is optional: it is inferred from the request host.
@@ -99,12 +187,18 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
   // entry can decrypt existing ones. An empty array counts as missing.
   const hasSecret = Array.isArray(secret) ? secret.length > 0 : Boolean(secret)
 
+  // An empty allow-list can never match a request, so it counts as missing
+  // rather than as a configured (but unusable) value.
+  const hasAppBaseUrl = Array.isArray(appBaseUrl)
+    ? appBaseUrl.length > 0
+    : Boolean(appBaseUrl)
+
   const missing: string[] = []
   if (!domain) missing.push('domain (AUTH0_DOMAIN)')
   if (!clientId) missing.push('clientId (AUTH0_CLIENT_ID)')
   if (!clientSecret) missing.push('clientSecret (AUTH0_CLIENT_SECRET)')
   if (!hasSecret) missing.push('secret (AUTH0_SECRET)')
-  if (!appBaseUrl && !usesDomainResolver) missing.push('appBaseUrl (APP_BASE_URL)')
+  if (!hasAppBaseUrl && !usesDomainResolver) missing.push('appBaseUrl (APP_BASE_URL)')
 
   if (missing.length > 0) {
     throw new InvalidConfigurationError(
@@ -121,7 +215,13 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
     )
   }
 
+  if (hasAppBaseUrl) assertValidAppBaseUrl(appBaseUrl!)
+
   warnOnInsecureCookie(options.sessionConfiguration?.cookie)
+  warnOnUntrustedProxyWithResolver(
+    usesDomainResolver,
+    configuredTrustProxy !== undefined,
+  )
 
   return {
     ...options,
@@ -130,6 +230,7 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
     clientSecret: clientSecret!,
     secret: secret!,
     appBaseUrl: appBaseUrl,
+    trustProxy,
     audience,
     // An explicit array (including empty, to keep all claims) wins; otherwise
     // strip the internal OIDC claims by default.
@@ -138,77 +239,179 @@ export function getConfig(options: Auth0ServerOptions = {}): ResolvedConfig {
 }
 
 /**
- * Infers the application base URL from the incoming request.
+ * Reads a single value out of a request header.
  *
- * Reads the host from `X-Forwarded-Host` (falling back to `Host`) and the
- * protocol from `X-Forwarded-Proto` (falling back to the request URL's
- * protocol), then builds `${protocol}://${host}`.
- *
- * Security: the host and forwarded headers are trusted as-is. This is only used
- * in Multiple Custom Domains mode (a {@link DomainResolver} is configured), and
- * that mode requires a trusted reverse proxy that sets these headers and blocks
- * client-supplied values. See the "Multiple Custom Domains" section in
- * EXAMPLES.md.
+ * Every proxy in a chain appends to `X-Forwarded-*`, so these headers can arrive
+ * as a comma-separated list. The left-most entry is the one closest to the
+ * browser, which is the value that describes the public request.
  */
-export function inferAppBaseUrlFromRequest(request: Request): string {
+function firstHeaderValue(value: string | null): string | undefined {
+  const first = value?.split(',')[0]?.trim()
+  return first ? first : undefined
+}
+
+/**
+ * Builds the origin the browser used to reach this app, as `protocol://host`.
+ *
+ * With `trustProxy` disabled (the default) this describes the request the server
+ * itself received: the `Host` header, falling back to the host in the request
+ * URL, and the request URL's protocol. With `trustProxy` enabled,
+ * `X-Forwarded-Host` and `X-Forwarded-Proto` take precedence, because a proxy
+ * that terminates TLS is the only party that still knows the public origin.
+ *
+ * The result is normalised through `URL`, so a header carrying a path, embedded
+ * credentials, or a default port cannot smuggle anything into the origin, and the
+ * protocol must be exactly `http` or `https`.
+ *
+ * This is the only place in the SDK that reads a forwarded header.
+ */
+export function publicRequestOrigin(
+  request: Request,
+  trustProxy = false,
+): string {
+  const received = new URL(request.url)
   const host =
-    request.headers.get('x-forwarded-host') ?? request.headers.get('host')
-  if (!host) {
+    (trustProxy
+      ? firstHeaderValue(request.headers.get('x-forwarded-host'))
+      : undefined) ??
+    firstHeaderValue(request.headers.get('host')) ??
+    received.host
+  // Strip a trailing colon from whichever value we use. `URL.protocol` always
+  // carries one (`"https:"`), and some proxies send `X-Forwarded-Proto: https:`
+  // with the colon as well, so normalising both keeps the check below from
+  // rejecting an otherwise valid scheme.
+  const protocol = (
+    (trustProxy
+      ? firstHeaderValue(request.headers.get('x-forwarded-proto'))
+      : undefined) ?? received.protocol
+  ).replace(/:$/, '')
+
+  // Check the protocol before it is concatenated, not after parsing. A value
+  // like `https://evil.com` would otherwise parse as the scheme `https` plus the
+  // host `evil.com`, and the host worked out above would be discarded.
+  if (!/^https?$/i.test(protocol)) {
+    throw new InvalidConfigurationError(
+      `Request protocol "${protocol}" is not http or https.`,
+    )
+  }
+
+  let origin: URL
+  try {
+    origin = new URL(`${protocol}://${host}`)
+  } catch {
+    throw new InvalidConfigurationError(
+      `Unable to determine the request origin from protocol "${protocol}" and ` +
+        `host "${host}".`,
+    )
+  }
+  return origin.origin
+}
+
+/**
+ * Infers the application base URL from the incoming request. Used when no
+ * `appBaseUrl` is configured, which is only allowed alongside a
+ * {@link DomainResolver} (Multiple Custom Domains).
+ *
+ * The host must be present on the request: with nothing configured to fall back
+ * on, guessing would produce a `redirect_uri` that Auth0 rejects. Pass
+ * `trustProxy: true` to take the host and protocol from `X-Forwarded-Host` and
+ * `X-Forwarded-Proto`, which is what a TLS-terminating proxy requires. See the
+ * "Multiple Custom Domains" section in EXAMPLES.md.
+ */
+export function inferAppBaseUrlFromRequest(
+  request: Request,
+  options: { trustProxy?: boolean } = {},
+): string {
+  const trustProxy = options.trustProxy ?? false
+  const forwardedHost = trustProxy
+    ? firstHeaderValue(request.headers.get('x-forwarded-host'))
+    : undefined
+  if (!forwardedHost && !firstHeaderValue(request.headers.get('host'))) {
     throw new InvalidConfigurationError(
       'Unable to infer appBaseUrl: the request has no Host header. In Multiple ' +
         'Custom Domains mode, ensure your reverse proxy forwards the host.',
     )
   }
-
-  const forwardedProto = request.headers.get('x-forwarded-proto')
-  // `X-Forwarded-Proto` can be a comma-separated list from chained proxies; the
-  // first entry is the client-facing protocol.
-  const protocol =
-    forwardedProto?.split(',')[0]?.trim() ||
-    new URL(request.url).protocol.replace(/:$/, '')
-
-  return `${protocol}://${host}`
+  return publicRequestOrigin(request, trustProxy)
 }
 
 /**
  * Resolves the application base URL for a given request.
  *
- * - string: used as-is.
+ * - string: used as-is. No request and no header is consulted, so this is
+ *   correct behind any proxy without further configuration.
  * - string[]: an allow-list; the request's origin must match one entry
  *   (supports staging/preview deployments). Throws if no entry matches.
  * - undefined: Multiple Custom Domains mode; inferred from the request host via
- *   {@link inferAppBaseUrlFromRequest}. Throws if no request is available.
+ *   {@link inferAppBaseUrlFromRequest}.
+ *
+ * Both per-request forms need a request, and need `trustProxy` enabled when the
+ * app is behind a proxy that terminates TLS.
+ *
+ * @remarks
+ * The first argument is the resolved config object (`auth0.config`), not the
+ * `appBaseUrl` value. Earlier betas took `appBaseUrl` directly; passing that now
+ * throws a {@link InvalidConfigurationError} explaining the change.
+ *
+ * @example
+ * ```ts
+ * const appBaseUrl = resolveAppBaseUrl(auth0.config, getRequest())
+ * ```
  */
 export function resolveAppBaseUrl(
-  appBaseUrl: AppBaseUrl | undefined,
+  config: AppBaseUrlConfig,
   request?: Request,
 ): string {
-  if (appBaseUrl === undefined) {
-    if (!request) {
-      throw new InvalidConfigurationError(
-        'Cannot resolve appBaseUrl without a request. In Multiple Custom ' +
-          'Domains mode, appBaseUrl is inferred per request.',
-      )
-    }
-    return inferAppBaseUrlFromRequest(request)
+  // `resolveAppBaseUrl` used to take `appBaseUrl` directly. It now takes the
+  // config so that `trustProxy` always travels with it; without this guard the
+  // old call shape would silently fall through to the Multiple Custom Domains
+  // branch and infer the base URL from the request. `null`/`undefined` is caught
+  // here too: in Multiple Custom Domains mode the old first argument was
+  // `appBaseUrl`, which is `undefined`, so an old call would otherwise crash with
+  // a raw "Cannot destructure" TypeError instead of this actionable message.
+  if (config == null || typeof config === 'string' || Array.isArray(config)) {
+    throw new InvalidConfigurationError(
+      'resolveAppBaseUrl() takes the resolved config object, not the ' +
+        '`appBaseUrl` value. Call resolveAppBaseUrl(auth0.config, request).',
+    )
   }
 
+  const { appBaseUrl, trustProxy = false } = config
+
+  // A single configured URL is authoritative: the app already knows its public
+  // origin, so nothing about the request can change it.
   if (typeof appBaseUrl === 'string') return appBaseUrl
 
-  if (!request) {
-    // No request to match against — fall back to the first allowed origin.
-    const first = appBaseUrl[0]
-    if (!first) {
-      throw new InvalidConfigurationError('appBaseUrl allow-list is empty.')
-    }
-    return first
+  if (Array.isArray(appBaseUrl) && appBaseUrl.length === 0) {
+    throw new InvalidConfigurationError('appBaseUrl allow-list is empty.')
   }
 
-  const requestOrigin = new URL(request.url).origin
+  if (!request) {
+    throw new InvalidConfigurationError(
+      appBaseUrl === undefined
+        ? 'Cannot resolve appBaseUrl without a request. In Multiple Custom ' +
+          'Domains mode, appBaseUrl is inferred per request.'
+        : 'Cannot resolve appBaseUrl without a request. With an appBaseUrl ' +
+          'allow-list, the entry to use is chosen per request, so the request ' +
+          'being handled must be passed in.',
+    )
+  }
+
+  if (appBaseUrl === undefined) {
+    return inferAppBaseUrlFromRequest(request, { trustProxy })
+  }
+
+  const requestOrigin = publicRequestOrigin(request, trustProxy)
   const match = appBaseUrl.find((url) => new URL(url).origin === requestOrigin)
   if (!match) {
     throw new InvalidConfigurationError(
-      `Request origin "${requestOrigin}" is not in the appBaseUrl allow-list.`,
+      `Request origin "${requestOrigin}" is not in the appBaseUrl allow-list ` +
+        `(${appBaseUrl.join(', ')}).` +
+        (trustProxy
+          ? ''
+          : ' If this app runs behind a reverse proxy or load balancer that ' +
+            'terminates TLS, set `trustProxy: true` (or AUTH0_TRUST_PROXY=true) ' +
+            'so the X-Forwarded-Host and X-Forwarded-Proto headers are used.'),
     )
   }
   return match
@@ -246,14 +449,49 @@ export function toSafeRedirect(
  * absent, no `returnTo` is stored and the caller falls back to a safe default.
  */
 export function toSafeAppState(
-  appBaseUrl: AppBaseUrl | undefined,
+  config: AppBaseUrlConfig,
   returnTo?: string,
   request?: Request,
 ): { returnTo: string } | undefined {
   if (!returnTo) return undefined
-  const base = resolveAppBaseUrl(appBaseUrl, request)
+  const base = resolveAppBaseUrl(config, request)
   const safeReturnTo = toSafeRedirect(returnTo, base)
   return safeReturnTo ? { returnTo: safeReturnTo } : undefined
+}
+
+/** Every auth endpoint path the SDK serves, fully resolved. */
+export interface ResolvedRoutePaths {
+  base: string
+  login: string
+  callback: string
+  logout: string
+  profile: string
+  backchannelLogout: string
+}
+
+/**
+ * Resolves the auth endpoint paths from the `routes` config, defaulting each one
+ * to a segment under the configured base.
+ *
+ * Every part of the SDK that needs one of these paths goes through here. The
+ * callback path in particular is used in three places (the `redirect_uri` sent to
+ * Auth0, the `redirect_uri` re-sent during the token exchange, and the dispatch
+ * of the incoming callback request), and Auth0 rejects the login unless all three
+ * agree.
+ */
+export function resolveRoutePaths(config: {
+  routes?: RoutesConfig
+}): ResolvedRoutePaths {
+  const routes = config.routes
+  const base = routes?.base ?? '/auth'
+  return {
+    base,
+    login: routes?.login ?? `${base}/login`,
+    callback: routes?.callback ?? `${base}/callback`,
+    logout: routes?.logout ?? `${base}/logout`,
+    profile: routes?.profile ?? `${base}/profile`,
+    backchannelLogout: routes?.backchannelLogout ?? `${base}/backchannel-logout`,
+  }
 }
 
 /**

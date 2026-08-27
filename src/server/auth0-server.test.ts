@@ -117,6 +117,29 @@ describe('auth0Server domain resolver (Multiple Custom Domains)', () => {
     expect(clientOpts.authorizationParams.redirect_uri).toBeUndefined()
   })
 
+  it('moves the baked redirect_uri when routes.base is customised', () => {
+    // The handler serving the callback derives its path from routes.base, so the
+    // baked redirect_uri has to follow it. When the two disagreed, Auth0 sent the
+    // browser to a path the SDK does not serve and login could never complete.
+    auth0Server({ ...BASE, routes: { base: '/authentication' } })
+    const clientOpts = serverClientArgs[0] as {
+      authorizationParams: { redirect_uri?: string }
+    }
+    expect(clientOpts.authorizationParams.redirect_uri).toBe(
+      'https://app.example.com/authentication/callback',
+    )
+  })
+
+  it('honours an individually overridden callback path', () => {
+    auth0Server({ ...BASE, routes: { callback: '/auth/oidc-callback' } })
+    const clientOpts = serverClientArgs[0] as {
+      authorizationParams: { redirect_uri?: string }
+    }
+    expect(clientOpts.authorizationParams.redirect_uri).toBe(
+      'https://app.example.com/auth/oidc-callback',
+    )
+  })
+
   it('omits a baked redirect_uri when appBaseUrl is an allow-list', () => {
     auth0Server({
       ...BASE,

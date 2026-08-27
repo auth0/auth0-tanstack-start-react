@@ -8,7 +8,7 @@ import {
 } from '@auth0/auth0-server-js'
 import { getRequest } from '@tanstack/start-server-core'
 import { TanStackStartCookieHandler } from './cookie-handler.js'
-import { getConfig, type ResolvedConfig } from './config.js'
+import { getConfig, resolveRoutePaths, type ResolvedConfig } from './config.js'
 import type { Auth0ServerOptions } from '../types/index.js'
 
 /**
@@ -108,7 +108,7 @@ export function auth0Server(
   // single static string. With an allow-list or a domain resolver, the correct
   // `redirect_uri` depends on the request, so the auth route handlers supply it
   // per request instead.
-  const callbackPath = config.routes?.callback ?? '/auth/callback'
+  const callbackPath = resolveRoutePaths(config).callback
   const staticAppBaseUrl =
     typeof config.appBaseUrl === 'string' ? config.appBaseUrl : undefined
   const redirectUri = staticAppBaseUrl
