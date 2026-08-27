@@ -841,7 +841,8 @@ callback, logout, organization switching, and the account linking and unlinking 
 > The `/auth/*` endpoints are served by `auth0Middleware()`, and it reads its own configuration rather
 > than borrowing your `auth0Server()` instance (see
 > [Register the middleware](#3-register-the-middleware)). Any option that affects those endpoints,
-> `trustProxy` included, has to reach it. The environment variable is the simplest way to do that,
+> for example `trustProxy`, an `appBaseUrl` allow-list, `routes`, or `excludedClaims`, has to reach
+> it. The environment variable is the simplest way to do that,
 > because both read it. If you would rather pass the option, pass it in both places:
 > `auth0Server({ trustProxy: true })` and `auth0Middleware({ trustProxy: true })`.
 

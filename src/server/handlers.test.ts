@@ -499,6 +499,38 @@ describe('callback behind a proxy that terminates TLS', () => {
       returnTo: 'https://app.example.com/goodbye',
     })
   })
+
+  it('logout in per-request mode without trustProxy uses the origin the app received', async () => {
+    // A domain resolver with no configured appBaseUrl puts logout on the same
+    // per-request path as the callback. With trustProxy off the SDK trusts what
+    // it received, so returnTo is the internal origin, not the forwarded one.
+    // This documents the untrusted behaviour that the callback path already has.
+    const auth0 = mockAuth0(
+      {},
+      { domain: () => 'brand-a.auth0.com', appBaseUrl: undefined },
+    )
+    setProxiedRequest('/auth/logout')
+    await auth0Handlers(auth0).GET()
+    expect(auth0.client.logout).toHaveBeenCalledWith({
+      returnTo: 'http://10.0.0.7:3000',
+    })
+  })
+
+  it('logout in per-request mode sends returnTo to the forwarded origin once trustProxy is on', async () => {
+    const auth0 = mockAuth0(
+      {},
+      {
+        domain: () => 'brand-a.auth0.com',
+        appBaseUrl: undefined,
+        trustProxy: true,
+      },
+    )
+    setProxiedRequest('/auth/logout')
+    await auth0Handlers(auth0).GET()
+    expect(auth0.client.logout).toHaveBeenCalledWith({
+      returnTo: 'https://app.example.com',
+    })
+  })
 })
 
 describe('redirect carries staged Set-Cookie headers (M6)', () => {
