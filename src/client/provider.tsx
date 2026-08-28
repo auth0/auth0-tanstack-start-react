@@ -11,6 +11,7 @@ import type {
   Auth0RouterContext,
   AuthorizationParameters,
 } from '../types/index.js'
+import { buildLoginHref } from '../login-url.js'
 import { setClientAuthCache, clearClientAuthCache } from './auth-cache.js'
 
 /** Extra options accepted by the client `login` redirect. */
@@ -19,6 +20,10 @@ export interface LoginRedirectOptions {
    * Extra OIDC authorization parameters (e.g. `screen_hint`, `connection`,
    * `login_hint`, `prompt`). Forwarded as query params to the login route,
    * where the server handler filters and applies them.
+   *
+   * SDK-controlled OAuth params (`scope`, `audience`, `state`, `redirect_uri`,
+   * and similar) are ignored here; the login route drops them. Set `scope` and
+   * `audience` on `auth0Server({ authorizationParams })` instead.
    */
   authorizationParams?: AuthorizationParameters
 }
@@ -137,18 +142,16 @@ export function Auth0Provider({
       ...current,
       routes: { login: loginPath, logout: logoutPath },
       login: (returnTo?: string, options?: LoginRedirectOptions) => {
-        const params = new URLSearchParams()
-        if (returnTo) params.set('returnTo', returnTo)
-        // Forward extra authorization params (e.g. screen_hint, connection,
-        // prompt) as query params; the server login handler reads and filters
-        // them before starting the interactive login.
-        for (const [key, value] of Object.entries(
-          options?.authorizationParams ?? {},
-        )) {
-          if (value != null) params.set(key, String(value))
-        }
-        const query = params.toString()
-        navigate(query ? `${loginPath}?${query}` : loginPath)
+        // Forward returnTo plus any extra authorization params (e.g. screen_hint,
+        // connection, prompt) as query params; the server login handler reads and
+        // filters them before starting the interactive login. Shared with the
+        // imperative login() and the route guards so every surface behaves alike.
+        navigate(
+          buildLoginHref(loginPath, {
+            returnTo,
+            authorizationParams: options?.authorizationParams,
+          }),
+        )
       },
       logout: () => {
         // Clear the module cache, then hand off to the server logout route with a

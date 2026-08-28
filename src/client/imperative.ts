@@ -1,5 +1,6 @@
 import { redirect } from '@tanstack/react-router'
 import type { Auth0RouterContext, LoginOptions, LogoutOptions } from '../types/index.js'
+import { buildLoginHref } from '../login-url.js'
 
 /** Router context shape these imperative helpers read. */
 export interface ImperativeContext {
@@ -15,9 +16,10 @@ export function login(
   options: LoginOptions & { loginPath?: string } = {},
 ): never {
   const loginPath = options.loginPath ?? '/auth/login'
-  const href = options.returnTo
-    ? `${loginPath}?returnTo=${encodeURIComponent(options.returnTo)}`
-    : loginPath
+  const href = buildLoginHref(loginPath, {
+    returnTo: options.returnTo,
+    authorizationParams: options.authorizationParams,
+  })
   // The auth routes live at the HTTP middleware layer, not in the router tree,
   // so a relative redirect must force a full-document navigation or the router
   // 404s trying to match it internally.

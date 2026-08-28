@@ -226,6 +226,45 @@ export const Route = createFileRoute('/_authenticated')({
 roles or permissions, check the exact claim on the server with `withApiClaimIncludes` or
 `withApiClaimEquals` (see [section 9](#9-protect-server-functions)).
 
+### Step-up MFA from a guard
+
+Every login redirect accepts `authorizationParams`, which the login route forwards to Auth0. This
+lets a `beforeLoad` ask for a stronger login, for example requesting the multi-factor `acr_values`
+when a sensitive route needs a fresh MFA. Inspect the claim you care about (such as `amr`) and, when
+it is missing, send the user back to login with the extra params. The imperative `login()` throws
+the redirect for you:
+
+```ts
+// src/routes/_authenticated/settings.tsx
+import { createFileRoute } from '@tanstack/react-router'
+import { login } from '@auth0/auth0-tanstack-start-react/client'
+
+const MFA_ACR = 'http://schemas.openid.net/pape/policies/2007/06/multi-factor'
+
+export const Route = createFileRoute('/_authenticated/settings')({
+  beforeLoad: ({ context }) => {
+    const amr = context.auth0.user?.amr
+    const usedMfa = Array.isArray(amr) && amr.includes('mfa')
+    if (context.auth0.isAuthenticated && !usedMfa) {
+      login(context, {
+        returnTo: '/settings',
+        authorizationParams: { acr_values: MFA_ACR },
+      })
+    }
+  },
+})
+```
+
+One caution: the guard only settles once the claim it inspects actually changes after login. `amr`
+is present only when your tenant issues it (an MFA policy or Action must add it), and the `acr_values`
+you request must be one Auth0 can satisfy. If neither ever makes the check pass, the guard keeps
+sending the user back to login in a loop. Confirm the tenant emits the claim you read before you gate
+a route on it, and gate on a claim you know the login will set.
+
+`requireAuth`, `requireOrg`, and the server `requireAuthMiddleware` / `requireOrgMiddleware` take the
+same `authorizationParams` option, as do `login()` and `useLogin()`, so any of them can drive a
+step-up.
+
 ### How guards read auth state
 
 Every guard reads `context.auth0`, which carries a `status` field:

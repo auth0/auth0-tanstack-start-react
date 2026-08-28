@@ -92,6 +92,40 @@ describe('auth0Handlers GET dispatch', () => {
     expect(arg.authorizationParams).toEqual({ screen_hint: 'signup' })
   })
 
+  it('login → drops OIDC Request-Object params so they cannot be smuggled to /authorize', async () => {
+    const auth0 = mockAuth0()
+    setRequest(
+      '/auth/login?request=jwt&request_uri=https://attacker.test/obj&claims=x&id_token_hint=y&response_mode=fragment&screen_hint=signup',
+    )
+    await auth0Handlers(auth0).GET()
+    const arg = (auth0.client.startInteractiveLogin as ReturnType<typeof vi.fn>)
+      .mock.calls[0]![0]
+    // Only the benign param survives; every Request-Object param is stripped.
+    expect(arg.authorizationParams).toEqual({ screen_hint: 'signup' })
+  })
+
+  it('login → drops reserved params even when their case is mixed', async () => {
+    const auth0 = mockAuth0()
+    // A crafted link may vary the case to dodge a case-sensitive filter.
+    setRequest('/auth/login?SCOPE=admin&Request_Uri=https://attacker.test/obj&screen_hint=signup')
+    await auth0Handlers(auth0).GET()
+    const arg = (auth0.client.startInteractiveLogin as ReturnType<typeof vi.fn>)
+      .mock.calls[0]![0]
+    expect(arg.authorizationParams).toEqual({ screen_hint: 'signup' })
+  })
+
+  it('login → still forwards prompt and login_hint (intentionally not reserved)', async () => {
+    const auth0 = mockAuth0()
+    setRequest('/auth/login?prompt=login&login_hint=jane@example.com')
+    await auth0Handlers(auth0).GET()
+    const arg = (auth0.client.startInteractiveLogin as ReturnType<typeof vi.fn>)
+      .mock.calls[0]![0]
+    expect(arg.authorizationParams).toEqual({
+      prompt: 'login',
+      login_hint: 'jane@example.com',
+    })
+  })
+
   it('login → no authorizationParams when only returnTo is present', async () => {
     const auth0 = mockAuth0()
     setRequest('/auth/login?returnTo=/x')

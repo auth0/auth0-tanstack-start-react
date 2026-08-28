@@ -100,6 +100,27 @@ describe('requireAuthMiddleware', () => {
     const opts = (thrown as { redirectOpts: { reloadDocument?: boolean } }).redirectOpts
     expect(opts.reloadDocument).toBe(true)
   })
+
+  it('forwards authorizationParams to the login route (step-up)', async () => {
+    const { thrown } = await runServer(
+      requireAuthMiddleware(mockAuth0(undefined), {
+        authorizationParams: { acr_values: 'urn:mfa' },
+      }),
+    )
+    const opts = (thrown as { redirectOpts: { href: string } }).redirectOpts
+    expect(opts.href).toBe('/auth/login?acr_values=urn%3Amfa')
+  })
+
+  it('forwards returnTo, before any authorizationParams', async () => {
+    const { thrown } = await runServer(
+      requireAuthMiddleware(mockAuth0(undefined), {
+        returnTo: '/dashboard',
+        authorizationParams: { acr_values: 'urn:mfa' },
+      }),
+    )
+    const opts = (thrown as { redirectOpts: { href: string } }).redirectOpts
+    expect(opts.href).toBe('/auth/login?returnTo=%2Fdashboard&acr_values=urn%3Amfa')
+  })
 })
 
 describe('requireOrgMiddleware', () => {
@@ -127,6 +148,36 @@ describe('requireOrgMiddleware', () => {
     )
     const opts = (thrown as { redirectOpts: { reloadDocument?: boolean } }).redirectOpts
     expect(opts.reloadDocument).toBe(true)
+  })
+
+  it('forwards authorizationParams alongside the organization', async () => {
+    const { thrown } = await runServer(
+      requireOrgMiddleware(mockAuth0(authedSession({ org_id: 'org_2' })), 'org_1', {
+        authorizationParams: { prompt: 'login' },
+      }),
+    )
+    const opts = (thrown as { redirectOpts: { href: string } }).redirectOpts
+    expect(opts.href).toBe('/auth/login?prompt=login&organization=org_1')
+  })
+
+  it('lets the target organization win over one passed in authorizationParams', async () => {
+    const { thrown } = await runServer(
+      requireOrgMiddleware(mockAuth0(authedSession({ org_id: 'org_2' })), 'org_1', {
+        authorizationParams: { organization: 'org_evil' },
+      }),
+    )
+    const opts = (thrown as { redirectOpts: { href: string } }).redirectOpts
+    expect(opts.href).toBe('/auth/login?organization=org_1')
+  })
+
+  it('forwards returnTo alongside the organization', async () => {
+    const { thrown } = await runServer(
+      requireOrgMiddleware(mockAuth0(authedSession({ org_id: 'org_2' })), 'org_1', {
+        returnTo: '/team',
+      }),
+    )
+    const opts = (thrown as { redirectOpts: { href: string } }).redirectOpts
+    expect(opts.href).toBe('/auth/login?returnTo=%2Fteam&organization=org_1')
   })
 })
 

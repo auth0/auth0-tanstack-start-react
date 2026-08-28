@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
 // redirect() throws a tagged object we can assert on without the router runtime.
+// The real redirect() exposes the caller's options under `.options` (see
+// guards.test.ts, which asserts on the real object), so mirror that shape here.
 vi.mock('@tanstack/react-router', () => ({
   redirect: (opts: { href: string; reloadDocument?: boolean }) => {
     const err = new Error('REDIRECT') as Error & {
-      href: string
-      reloadDocument?: boolean
+      options: { href: string; reloadDocument?: boolean }
     }
-    err.href = opts.href
-    err.reloadDocument = opts.reloadDocument
+    err.options = opts
     return err
   },
 }))
@@ -25,12 +25,12 @@ const ctx: ImperativeContext = {
   },
 }
 
-/** Captures the redirect error thrown by an imperative helper. */
+/** Captures a redirect thrown by an imperative helper and returns its options. */
 function catchRedirect(fn: () => never): { href: string; reloadDocument?: boolean } {
   try {
     fn()
   } catch (e) {
-    return e as { href: string; reloadDocument?: boolean }
+    return (e as { options: { href: string; reloadDocument?: boolean } }).options
   }
   throw new Error('expected a redirect to be thrown')
 }
@@ -42,7 +42,24 @@ describe('login', () => {
 
   it('appends an encoded returnTo', () => {
     const href = catchRedirect(() => login(ctx, { returnTo: '/a b' })).href
-    expect(href).toBe('/auth/login?returnTo=%2Fa%20b')
+    expect(href).toBe('/auth/login?returnTo=%2Fa+b')
+  })
+
+  it('forwards authorizationParams (e.g. acr_values for a step-up)', () => {
+    const href = catchRedirect(() =>
+      login(ctx, { authorizationParams: { acr_values: 'urn:mfa', prompt: 'login' } }),
+    ).href
+    expect(href).toBe('/auth/login?acr_values=urn%3Amfa&prompt=login')
+  })
+
+  it('combines returnTo with authorizationParams', () => {
+    const href = catchRedirect(() =>
+      login(ctx, {
+        returnTo: '/settings',
+        authorizationParams: { screen_hint: 'signup' },
+      }),
+    ).href
+    expect(href).toBe('/auth/login?returnTo=%2Fsettings&screen_hint=signup')
   })
 
   it('honors a custom loginPath', () => {

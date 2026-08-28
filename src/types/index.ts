@@ -129,8 +129,15 @@ export interface AuthorizationParameters {
 /** Options for `login()` / `useLogin()`. */
 export interface LoginOptions {
   returnTo?: string
+  /**
+   * Extra OIDC authorization parameters to forward to the login route (e.g.
+   * `acr_values` for a step-up, `prompt`, `login_hint`, `screen_hint`).
+   *
+   * SDK-controlled OAuth params (`scope`, `audience`, `state`, `redirect_uri`,
+   * and similar) are ignored here; the login route drops them. Set `scope` and
+   * `audience` on `auth0Server({ authorizationParams })` instead.
+   */
   authorizationParams?: AuthorizationParameters
-  appState?: Record<string, unknown>
 }
 
 /**
