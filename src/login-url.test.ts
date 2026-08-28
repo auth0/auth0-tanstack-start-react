@@ -21,6 +21,15 @@ describe('buildLoginHref', () => {
     ).toBe('/auth/login?returnTo=%2Fx&prompt=login')
   })
 
+  it('lets the explicit returnTo win over one in authorizationParams', () => {
+    expect(
+      buildLoginHref('/auth/login', {
+        returnTo: '/explicit',
+        authorizationParams: { returnTo: '/from-params', prompt: 'login' },
+      }),
+    ).toBe('/auth/login?returnTo=%2Fexplicit&prompt=login')
+  })
+
   it('skips null and undefined authorization values', () => {
     expect(
       buildLoginHref('/auth/login', {

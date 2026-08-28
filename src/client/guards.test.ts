@@ -50,6 +50,20 @@ describe('requireAuth', () => {
     ) as { options?: { href?: string } }
     expect(thrown.options?.href).toBe('/auth/login?acr_values=urn%3Amfa')
   })
+
+  it('forwards returnTo before authorizationParams', () => {
+    const ctx = createMockAuth0Context()
+    const thrown = runGuard(
+      requireAuth({
+        returnTo: '/dashboard',
+        authorizationParams: { acr_values: 'urn:mfa' },
+      }),
+      ctx,
+    ) as { options?: { href?: string } }
+    expect(thrown.options?.href).toBe(
+      '/auth/login?returnTo=%2Fdashboard&acr_values=urn%3Amfa',
+    )
+  })
 })
 
 describe('requireOrg', () => {

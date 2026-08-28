@@ -12,6 +12,8 @@ import type { AuthorizationParameters } from './types/index.js'
  * example, `acr_values`.
  *
  * `returnTo` is emitted first so the common case keeps a stable, readable URL.
+ * The dedicated `returnTo` argument always wins: a `returnTo` inside
+ * `authorizationParams` is ignored, so a caller cannot accidentally overwrite it.
  * `null`/`undefined` authorization values are skipped rather than serialized as
  * the string `"null"`. Values are coerced with `String()` so numbers (e.g.
  * `max_age`) come through as expected.
@@ -28,6 +30,9 @@ export function buildLoginHref(
   for (const [key, value] of Object.entries(
     options.authorizationParams ?? {},
   )) {
+    // `returnTo` is emitted above from its own argument; ignore it here so the
+    // explicit argument always wins over one buried in authorizationParams.
+    if (key === 'returnTo') continue
     if (value != null) params.set(key, String(value))
   }
   const query = params.toString()

@@ -51,16 +51,19 @@ function isStatelessStoreError(error: unknown): boolean {
 }
 
 // Object.prototype names plus commonly abused prototype-pollution keys, blocked
-// from user-supplied authorization params.
-const DENIED_PARAM_KEYS = new Set([
-  ...Object.getOwnPropertyNames(Object.prototype),
-  '__proto__',
-  'constructor',
-  'prototype',
-])
+// from user-supplied authorization params. Stored lower-cased and matched
+// case-insensitively (see the loop below), so a mixed-case key cannot slip past.
+const DENIED_PARAM_KEYS = new Set(
+  [
+    ...Object.getOwnPropertyNames(Object.prototype),
+    '__proto__',
+    'constructor',
+    'prototype',
+  ].map((key) => key.toLowerCase()),
+)
 
 // OAuth/OIDC protocol parameters the SDK controls; never overridable by the
-// caller through query params.
+// caller through query params. Matched case-insensitively (see the loop below).
 //
 // The Request-Object params (`request`, `request_uri`, `claims`, `id_token_hint`,
 // `response_mode`) are reserved too: a crafted login link such as
@@ -97,10 +100,14 @@ function authorizationParamsFromQuery(
 ): Record<string, string> | undefined {
   const filtered: Record<string, string> = Object.create(null)
   for (const [key, value] of params.entries()) {
+    // Match the deny/reserved lists case-insensitively. Auth0 only honors the
+    // canonical lower-case names, but a mixed-case key such as `Request_Uri` or
+    // `SCOPE` would otherwise skip the filter and be forwarded to `/authorize`.
+    const canonical = key.toLowerCase()
     if (
       key === 'returnTo' ||
-      DENIED_PARAM_KEYS.has(key) ||
-      RESERVED_OAUTH_PARAMS.has(key)
+      DENIED_PARAM_KEYS.has(canonical) ||
+      RESERVED_OAUTH_PARAMS.has(canonical)
     ) {
       continue
     }

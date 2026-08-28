@@ -104,6 +104,16 @@ describe('auth0Handlers GET dispatch', () => {
     expect(arg.authorizationParams).toEqual({ screen_hint: 'signup' })
   })
 
+  it('login → drops reserved params even when their case is mixed', async () => {
+    const auth0 = mockAuth0()
+    // A crafted link may vary the case to dodge a case-sensitive filter.
+    setRequest('/auth/login?SCOPE=admin&Request_Uri=https://attacker.test/obj&screen_hint=signup')
+    await auth0Handlers(auth0).GET()
+    const arg = (auth0.client.startInteractiveLogin as ReturnType<typeof vi.fn>)
+      .mock.calls[0]![0]
+    expect(arg.authorizationParams).toEqual({ screen_hint: 'signup' })
+  })
+
   it('login → still forwards prompt and login_hint (intentionally not reserved)', async () => {
     const auth0 = mockAuth0()
     setRequest('/auth/login?prompt=login&login_hint=jane@example.com')
