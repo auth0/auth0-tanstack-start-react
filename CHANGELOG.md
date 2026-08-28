@@ -1,5 +1,14 @@
 # Change Log
 
+## [v1.0.0-beta.1](https://github.com/auth0/auth0-tanstack-start-react/tree/v1.0.0-beta.1) (2026-08-28)
+[Full Changelog](https://github.com/auth0/auth0-tanstack-start-react/compare/v1.0.0-beta.0...v1.0.0-beta.1)
+
+**Fixed**
+- fix: forward authorizationParams on login redirects; reserve OIDC Req… [\#31](https://github.com/auth0/auth0-tanstack-start-react/pull/31) ([@nandan-bhat](https://github.com/nandan-bhat))
+- fix: remove unpopulated `display_name` from `Organization` [\#30](https://github.com/auth0/auth0-tanstack-start-react/pull/30) ([@nandan-bhat](https://github.com/nandan-bhat))
+- fix: derive the callback redirect_uri from appBaseUr [\#29](https://github.com/auth0/auth0-tanstack-start-react/pull/29) ([@nandan-bhat](https://github.com/nandan-bhat))
+
+
 ## [v1.0.0-beta.0](https://github.com/auth0/auth0-tanstack-start-react/tree/v1.0.0-beta.0) (2026-08-11)
 
 The first release of `@auth0/auth0-tanstack-start-react`, the Auth0 Authentication
