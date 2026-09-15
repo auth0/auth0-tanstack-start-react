@@ -6,7 +6,7 @@ import {
   type StateStore,
   type DomainResolver as FoundationDomainResolver,
 } from '@auth0/auth0-server-js'
-import { getRequest } from '@tanstack/start-server-core'
+import { getRequest } from '@tanstack/start-server-core/request-response'
 import { TanStackStartCookieHandler } from './cookie-handler.js'
 import { getConfig, resolveRoutePaths, type ResolvedConfig } from './config.js'
 import type { Auth0ServerOptions } from '../types/index.js'

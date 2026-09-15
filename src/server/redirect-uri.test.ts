@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 let currentRequest: Request
 
-vi.mock('@tanstack/start-server-core', () => ({
+vi.mock('@tanstack/start-server-core/request-response', () => ({
   getRequest: () => currentRequest,
 }))
 

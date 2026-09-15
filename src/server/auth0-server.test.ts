@@ -9,7 +9,7 @@ const serverClientArgs: unknown[] = []
 // The domain-resolver wrapper reads the ambient request via `getRequest()`. Mock
 // it so a test can drive what the wrapper sees on each call.
 let currentRequest: Request
-vi.mock('@tanstack/start-server-core', () => ({
+vi.mock('@tanstack/start-server-core/request-response', () => ({
   getRequest: () => currentRequest,
 }))
 

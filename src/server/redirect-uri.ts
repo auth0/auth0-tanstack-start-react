@@ -1,4 +1,4 @@
-import { getRequest } from '@tanstack/start-server-core'
+import { getRequest } from '@tanstack/start-server-core/request-response'
 import type { Auth0Instance } from './auth0-server.js'
 import {
   resolveAppBaseUrl,

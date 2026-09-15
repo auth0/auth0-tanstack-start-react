@@ -1,17 +1,20 @@
-// Import the cookie/request helpers from the narrow `@tanstack/start-server-core`
-// entry, NOT the broad `@tanstack/react-start/server` barrel. The barrel
-// re-exports the SSR render handlers (renderRouterToString → react-dom/server),
-// which, if this module is ever reached from a client-bundled file (e.g. a
-// `start.ts` that registers middleware), would drag server-only render code into
-// the client bundle and break hydration. The narrow entry exposes the same
-// helpers without the renderer. (start-server-core is a direct dependency of
-// @tanstack/react-start, so it is always present.)
+// Import the cookie/request helpers from the `@tanstack/start-server-core/request-response`
+// subpath, NOT the package root or the `@tanstack/react-start/server` barrel that
+// re-exports it. Those roots pull in `createStartHandler`, which references the
+// per-app virtual modules `#tanstack-router-entry` / `#tanstack-start-entry`; when a
+// downstream app pre-bundles this SDK as a dependency (e.g. Vite's dep optimizer),
+// those specifiers cannot be resolved and the consumer's `vite dev`/build fails
+// during dependency optimization. The roots also drag in the SSR renderer
+// (renderRouterToString → react-dom/server), which would bloat a client bundle that
+// transitively reaches this module and break hydration. The `/request-response`
+// subpath exposes the same helpers with neither problem — and start-server-core is a
+// direct dependency of @tanstack/react-start, so it is always present.
 import {
   getCookie,
   getCookies,
   setCookie,
   deleteCookie,
-} from '@tanstack/start-server-core'
+} from '@tanstack/start-server-core/request-response'
 import type {
   CookieHandler,
   CookieSerializeOptions,

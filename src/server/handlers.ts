@@ -1,6 +1,8 @@
-// Narrow entry (not the @tanstack/react-start/server barrel) so the SSR render
-// handlers are never pulled into a client-reachable graph. See cookie-handler.ts.
-import { getRequest, getResponseHeaders } from '@tanstack/start-server-core'
+// Import from the `/request-response` subpath, not the package root or the
+// `@tanstack/react-start/server` barrel: the root pulls in createStartHandler's
+// unresolvable virtual modules (which break a consumer's dep-optimizer build) and
+// the SSR renderer. See cookie-handler.ts for the full rationale.
+import { getRequest, getResponseHeaders } from '@tanstack/start-server-core/request-response'
 import type { Auth0Instance } from './auth0-server.js'
 import {
   resolveAppBaseUrl,
