@@ -1,5 +1,12 @@
 # Change Log
 
+## [v1.0.0-beta.2](https://github.com/auth0/auth0-tanstack-start-react/tree/v1.0.0-beta.2) (2026-09-17)
+[Full Changelog](https://github.com/auth0/auth0-tanstack-start-react/compare/v1.0.0-beta.1...v1.0.0-beta.2)
+
+**Fixed**
+- fix(server): import request and cookie helpers from @tanstack/start-server-core/request-response [\#39](https://github.com/auth0/auth0-tanstack-start-react/pull/39) ([@xeofd](https://github.com/xeofd))
+
+
 ## [v1.0.0-beta.1](https://github.com/auth0/auth0-tanstack-start-react/tree/v1.0.0-beta.1) (2026-08-28)
 [Full Changelog](https://github.com/auth0/auth0-tanstack-start-react/compare/v1.0.0-beta.0...v1.0.0-beta.1)
 
