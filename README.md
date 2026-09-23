@@ -35,6 +35,7 @@ This SDK relies on the following peer dependencies, which you install in your ow
 | `react-dom` | `^18.0.0` or `^19.0.0` |
 | `@tanstack/react-router` | `^1.0.0` |
 | `@tanstack/react-start` | `^1.0.0` |
+| `@tanstack/start-server-core` | `^1.169.8` |
 
 ## Package structure
 
