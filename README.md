@@ -27,7 +27,7 @@ with the rest of the Auth0 ecosystem.
 npm install @auth0/auth0-tanstack-start-react
 ```
 
-This SDK relies on the following peer dependencies, which you install in your own app:
+This SDK relies on the following peer dependencies:
 
 | Package | Version |
 | --- | --- |
@@ -35,6 +35,13 @@ This SDK relies on the following peer dependencies, which you install in your ow
 | `react-dom` | `^18.0.0` or `^19.0.0` |
 | `@tanstack/react-router` | `^1.0.0` |
 | `@tanstack/react-start` | `^1.0.0` |
+| `@tanstack/start-server-core` | `^1.169.8` |
+
+You install `react`, `react-dom`, `@tanstack/react-router`, and `@tanstack/react-start` in your own
+app. `@tanstack/start-server-core` usually comes in through `@tanstack/react-start`, so you rarely
+install it directly, but this SDK imports from it directly and needs at least `1.169.8`. If your
+`@tanstack/react-start` resolves an older `@tanstack/start-server-core`, add
+`@tanstack/start-server-core@^1.169.8` to your app.
 
 ## Package structure
 

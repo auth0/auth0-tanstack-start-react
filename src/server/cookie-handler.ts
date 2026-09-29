@@ -7,8 +7,12 @@
 // during dependency optimization. The roots also drag in the SSR renderer
 // (renderRouterToString → react-dom/server), which would bloat a client bundle that
 // transitively reaches this module and break hydration. The `/request-response`
-// subpath exposes the same helpers with neither problem — and start-server-core is a
-// direct dependency of @tanstack/react-start, so it is always present.
+// subpath exposes the same helpers with neither problem, but it is only exported by
+// @tanstack/start-server-core 1.169.8 and later (it is absent through 1.169.7). That is
+// the floor pinned in package.json peerDependencies and devDependencies.
+// @tanstack/react-start pins core transitively at an exact version, and older
+// react-start releases pin a core below this floor, so do not assume an already-installed
+// core is new enough.
 import {
   getCookie,
   getCookies,
